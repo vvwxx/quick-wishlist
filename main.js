@@ -198,7 +198,7 @@ module.exports = class QuickWishlist extends Plugin {
 
   sections(embed = "", reasons = "") {
     const s = this.settings;
-    return `## ${s.photoHeading}\n${embed}\n\n## ${s.reasonsHeading}\n${reasons}\n`;
+    return `## ${s.photoHeading}\n\n${embed}\n\n## ${s.reasonsHeading}\n\n${reasons}\n`;
   }
 
   async fillNote(file, { force = false } = {}) {
