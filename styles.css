@@ -1,0 +1,33 @@
+/* Form: large, centered, blurred background. */
+.modal-container.qw-modal .modal-bg {
+  background: rgba(0, 0, 0, 0.45) !important;
+  backdrop-filter: blur(8px);
+}
+.modal-container.qw-modal .modal {
+  width: min(760px, 72vw);
+  max-height: 85vh;
+  padding: 32px 40px 24px;
+  border-radius: 16px;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.7);
+}
+.qw-head h2 { margin: 0 0 8px; }
+.qw-steps { display: flex; gap: 20px; font-size: var(--font-ui-small); color: var(--text-faint); margin-bottom: 20px; }
+.qw-steps .is-active { color: var(--text-accent); font-weight: 600; }
+.qw-steps .is-done { color: var(--text-muted); }
+.qw-body { display: flex; flex-direction: column; gap: 14px; }
+.qw-field { display: grid; grid-template-columns: 160px 1fr; align-items: center; gap: 16px; }
+.qw-field label { color: var(--text-normal); }
+.qw-optional { color: var(--text-faint); font-size: var(--font-ui-smaller); }
+.qw-field input, .qw-field select { width: 100%; font-size: var(--font-ui-medium); }
+.qw-field:has(textarea) { grid-template-columns: 1fr; align-items: start; }
+.qw-reasons { width: 100%; min-height: 220px; font-size: var(--font-ui-medium); resize: vertical; }
+.qw-drop {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  min-height: 300px; padding: 16px; border: 2px dashed var(--background-modifier-border); border-radius: 12px; outline: none;
+}
+.qw-drop:focus { border-color: var(--interactive-accent); }
+.qw-drop img { max-height: 320px; max-width: 100%; border-radius: 8px; object-fit: contain; }
+.qw-drop-title { font-size: var(--font-ui-medium); color: var(--text-muted); }
+.qw-hint { color: var(--text-faint); font-size: var(--font-ui-smaller); }
+.qw-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 24px; }
+.qw-buttons { display: flex; gap: 8px; }
