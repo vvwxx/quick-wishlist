@@ -198,7 +198,7 @@ module.exports = class QuickWishlist extends Plugin {
 
   sections(embed = "", reasons = "") {
     const s = this.settings;
-    return `## ${s.photoHeading}\n\n${embed}\n\n## ${s.reasonsHeading}\n\n${reasons}\n`;
+    return `## ${s.photoHeading}\n\n${embed}\n\n## ${s.reasonsHeading}\n\n${reasons || "- "}\n`;
   }
 
   async fillNote(file, { force = false } = {}) {
@@ -511,11 +511,28 @@ class WishlistModal extends Modal {
   }
 
   renderReasons(body) {
-    const row = this.field(body, "Reasons, one per line", true);
+    const row = this.field(body, "Reasons", true);
     const area = row.createEl("textarea", { cls: "qw-reasons" });
-    area.value = this.data.reasons;
+    // Works as a bulleted list: starts with "- " and every Enter adds a new "- ".
+    area.value = this.data.reasons || "- ";
     area.addEventListener("input", () => (this.data.reasons = area.value));
-    window.setTimeout(() => area.focus(), 0);
+    area.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" || e.ctrlKey || e.metaKey || e.shiftKey || e.isComposing) return;
+      e.preventDefault();
+      const { selectionStart: start, selectionEnd: end, value } = area;
+      const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+      // Enter on an empty bullet removes it, like in the editor.
+      if (value.slice(lineStart, start).trim() === "-" && value.slice(end).split("\n")[0].trim() === "") {
+        area.setRangeText("", lineStart, end, "end");
+      } else {
+        area.setRangeText("\n- ", start, end, "end");
+      }
+      this.data.reasons = area.value;
+    });
+    window.setTimeout(() => {
+      area.focus();
+      area.setSelectionRange(area.value.length, area.value.length);
+    }, 0);
   }
 
   go(step) {
@@ -580,8 +597,8 @@ async function createItem(plugin, data, image) {
     store: data.store.trim() || null,
   });
 
-  const reasons = data.reasons.split("\n").map((l) => l.trim()).filter(Boolean)
-    .map((l) => (l.startsWith("- ") ? l : `- ${l}`)).join("\n");
+  const reasons = data.reasons.split("\n").map((l) => l.trim().replace(/^-\s*/, "")).filter(Boolean)
+    .map((l) => `- ${l}`).join("\n");
   const file = await vault.create(notePath, plugin.sections(embed, reasons));
   await fileManager.processFrontMatter(file, (fm) => Object.assign(fm, props));
   return file;
