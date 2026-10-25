@@ -1,9 +1,11 @@
 "use strict";
 
 const {
-  Plugin, Modal, Notice, TFile, PluginSettingTab, Setting,
-  AbstractInputSuggest, requestUrl, normalizePath, parseYaml,
+  Plugin, Modal, Notice, TFile, PluginSettingTab, Setting, Keymap,
+  AbstractInputSuggest, BasesView, requestUrl, normalizePath, parseYaml,
 } = require("obsidian");
+
+const SMART_VIEW = "qw-smart-categories";
 
 // Interface text. {name} placeholders are filled by t().
 const STRINGS = {
@@ -19,7 +21,8 @@ const STRINGS = {
     product: "Product",
     price: "Price",
     currency: "Currency",
-    category: "Category",
+    category: "Categories",
+    categoryPlaceholder: "Enter or comma to add",
     priority: "Priority",
     rank: "Rank",
     link: "Product link",
@@ -91,6 +94,8 @@ const STRINGS = {
     colStatus: "Status",
     colPurchasedOn: "Purchased on",
     noCategory: "(no category)",
+    viewSmart: "Smart categories",
+    emptyView: "No items yet.",
   },
   pt: {
     cmdNewItem: "Novo item da wishlist",
@@ -104,7 +109,8 @@ const STRINGS = {
     product: "Produto",
     price: "Preço",
     currency: "Moeda",
-    category: "Categoria",
+    category: "Categorias",
+    categoryPlaceholder: "Enter ou vírgula para adicionar",
     priority: "Prioridade",
     rank: "Rank",
     link: "Link do produto",
@@ -174,6 +180,8 @@ const STRINGS = {
     colStatus: "Status",
     colPurchasedOn: "Comprado em",
     noCategory: "(sem categoria)",
+    viewSmart: "Categorias inteligentes",
+    emptyView: "Nenhum item ainda.",
   },
 };
 
@@ -212,6 +220,8 @@ const DEFAULT_SETTINGS = {
   fillNewNotes: true,
   interceptNewButton: true,
 };
+
+const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "avif", "svg", "bmp"];
 
 const IMAGE_TYPES = {
   "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif", "image/avif": "avif",
@@ -262,6 +272,15 @@ module.exports = class QuickWishlist extends Plugin {
         return true;
       },
     });
+
+    // "Smart categories" view type for bases (Obsidian 1.10+).
+    if (BasesView && typeof this.registerBasesView === "function") {
+      this.registerBasesView(SMART_VIEW, {
+        name: this.t("viewSmart"),
+        icon: "lucide-sparkles",
+        factory: (controller, containerEl) => new SmartCategoriesView(controller, containerEl, this),
+      });
+    }
 
     // Notes created in the wishlist folder some other way (the file explorer,
     // a hotkey...) get the same properties and sections.
@@ -550,14 +569,11 @@ ${cards}
       - property: rank
         direction: ASC
 ${cards}
-  - type: cards
+  - type: ${SMART_VIEW}
     name: ${JSON.stringify(t("viewByCategory"))}
     filters:
       and:
         - ${status(s.status)}
-    groupBy:
-      property: formula.main_category
-      direction: ASC
     order:
       - file.name
       - categories
@@ -567,7 +583,6 @@ ${cards}
     sort:
       - property: rank
         direction: ASC
-${cards}
   - type: table
     name: ${JSON.stringify(t("viewReorder"))}
     filters:
@@ -602,6 +617,101 @@ ${cards}
 `;
 }
 
+// Groups items by category, "smartly": an item shows up in every category it
+// shares with at least one other item, never alone in a group of its own,
+// unless all its categories are solo; then it stays in the first one.
+// Biggest groups first.
+function smartGroups(items, categoriesOf, noCategory) {
+  const count = new Map();
+  for (const item of items) for (const c of categoriesOf(item)) count.set(c, (count.get(c) ?? 0) + 1);
+  const groups = new Map();
+  const add = (c, item) => (groups.get(c) ?? groups.set(c, []).get(c)).push(item);
+  for (const item of items) {
+    const cats = categoriesOf(item);
+    if (!cats.length) { add(noCategory, item); continue; }
+    const shared = cats.filter((c) => count.get(c) >= 2);
+    if (shared.length) shared.forEach((c) => add(c, item));
+    else add(cats.reduce((best, c) => (count.get(c) > count.get(best) ? c : best), cats[0]), item);
+  }
+  return [...groups.entries()].sort(([a, x], [b, y]) =>
+    (a === noCategory) - (b === noCategory) || y.length - x.length || a.localeCompare(b));
+}
+
+const SmartCategoriesView = BasesView ? class extends BasesView {
+  constructor(controller, containerEl, plugin) {
+    super(controller);
+    this.type = SMART_VIEW;
+    this.plugin = plugin;
+    this.rootEl = containerEl.createDiv("qw-smart");
+  }
+
+  onDataUpdated() {
+    this.render();
+  }
+
+  categoriesOf(entry) {
+    const raw = this.app.metadataCache.getFileCache(entry.file)?.frontmatter?.categories;
+    return [...new Set([].concat(raw ?? []).map((c) => String(c ?? "").trim()).filter(Boolean))];
+  }
+
+  photoOf(file) {
+    const embeds = this.app.metadataCache.getFileCache(file)?.embeds ?? [];
+    for (const e of embeds) {
+      const target = this.app.metadataCache.getFirstLinkpathDest(e.link.split("|")[0], file.path);
+      if (target && IMAGE_EXTENSIONS.includes(target.extension.toLowerCase())) return this.app.vault.getResourcePath(target);
+    }
+    return null;
+  }
+
+  render() {
+    const root = this.rootEl;
+    root.empty();
+    const entries = this.data?.data ?? [];
+    if (!entries.length) {
+      root.createDiv({ cls: "qw-smart-empty", text: this.plugin.t("emptyView") });
+      return;
+    }
+    const props = (this.config?.getOrder?.() ?? []).filter((p) => p !== "file.name");
+    for (const [name, items] of smartGroups(entries, (e) => this.categoriesOf(e), this.plugin.t("noCategory"))) {
+      const group = root.createDiv("qw-smart-group");
+      const head = group.createDiv("qw-smart-heading");
+      head.createSpan({ text: name });
+      head.createSpan({ cls: "qw-smart-count", text: String(items.length) });
+      const grid = group.createDiv("qw-smart-grid");
+      for (const entry of items) this.renderCard(grid, entry, props);
+    }
+  }
+
+  renderCard(grid, entry, props) {
+    const file = entry.file;
+    const card = grid.createDiv({ cls: "qw-card", attr: { tabindex: "0" } });
+    const cover = card.createDiv("qw-card-cover");
+    const photo = this.photoOf(file);
+    if (photo) cover.createEl("img", { attr: { src: photo, alt: file.basename } });
+    const body = card.createDiv("qw-card-body");
+    body.createDiv({ cls: "qw-card-title", text: file.basename });
+    for (const prop of props) {
+      const row = body.createDiv("qw-card-prop");
+      row.createDiv({ cls: "qw-card-label", text: this.config.getDisplayName(prop) });
+      const valueEl = row.createDiv("qw-card-value");
+      const value = entry.getValue(prop);
+      const text = value == null ? "" : String(value.toString() ?? "");
+      if (!text || text === "null") valueEl.setText("-");
+      else if (/^https?:\/\//i.test(text)) {
+        const a = valueEl.createEl("a", {
+          cls: "external-link",
+          href: text,
+          text: prop.startsWith("formula.") ? this.plugin.settings.linkLabel : text,
+        });
+        a.addEventListener("click", (e) => e.stopPropagation());
+      } else valueEl.setText(text);
+    }
+    const open = (e) => this.app.workspace.getLeaf(Keymap.isModEvent(e)).openFile(file);
+    card.addEventListener("click", open);
+    card.addEventListener("keydown", (e) => { if (e.key === "Enter") open(e); });
+  }
+} : null;
+
 // Three-step form built for the keyboard: Enter goes to the next step,
 // Ctrl/Cmd+Enter saves on the last one, Esc cancels.
 class WishlistModal extends Modal {
@@ -611,7 +721,7 @@ class WishlistModal extends Modal {
     const s = plugin.settings;
     this.step = 0;
     this.data = {
-      product: "", price: "", currency: plugin.currency(s.defaultCurrency).symbol, category: "",
+      product: "", price: "", currency: plugin.currency(s.defaultCurrency).symbol, categories: [], categoryDraft: "",
       priority: s.defaultPriority, rank: "", link: "", store: "", reasons: "",
     };
     this.image = null; // { buffer, ext, previewUrl }
@@ -716,7 +826,7 @@ class WishlistModal extends Modal {
       previous = this.data.currency;
     });
 
-    this.text(body, "category", this.t("category"), { optional: true, suggestions: p.valuesOf("categories") });
+    this.categoriesField(body);
     this.select(body, "priority", this.t("priority"), p.list(p.settings.priorities));
 
     const rank = this.text(body, "rank", this.t("rank"), { optional: true });
@@ -730,6 +840,56 @@ class WishlistModal extends Modal {
     this.text(body, "link", this.t("link"), { optional: true });
     this.text(body, "store", this.t("store"), { optional: true, suggestions: p.valuesOf("store") });
     window.setTimeout(() => product.focus(), 0);
+  }
+
+  // Several categories as chips: Enter or comma adds, Backspace on an empty
+  // field removes the last one, Enter on an empty field goes to the next step.
+  categoriesField(body) {
+    const row = this.field(body, this.t("category"), true);
+    const box = row.createDiv("qw-chips");
+    const input = box.createEl("input", { type: "text", attr: { placeholder: this.t("categoryPlaceholder") } });
+    input.value = this.data.categoryDraft;
+    const draw = () => {
+      box.querySelectorAll(".qw-chip").forEach((el) => el.remove());
+      for (const c of this.data.categories) {
+        const chip = createDiv({ cls: "qw-chip", text: c });
+        const x = chip.createSpan({ cls: "qw-chip-remove", text: "×" });
+        x.addEventListener("click", () => {
+          this.data.categories = this.data.categories.filter((v) => v !== c);
+          draw();
+          input.focus();
+        });
+        box.insertBefore(chip, input);
+      }
+      input.placeholder = this.data.categories.length ? "" : this.t("categoryPlaceholder");
+    };
+    const add = (text) => {
+      for (const c of String(text).split(",").map((v) => v.trim()).filter(Boolean)) {
+        if (!this.data.categories.includes(c)) this.data.categories.push(c);
+      }
+      input.value = "";
+      this.data.categoryDraft = "";
+      draw();
+    };
+    const suggest = new ValueSuggest(this.app, input, this.plugin.valuesOf("categories"), (v) => add(v),
+      () => this.data.categories);
+    input.addEventListener("input", () => {
+      if (input.value.includes(",")) add(input.value);
+      else this.data.categoryDraft = input.value;
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.isComposing || e.ctrlKey || e.metaKey) return;
+      if (e.key === "Enter" && !suggest.isOpen) {
+        e.preventDefault();
+        if (input.value.trim()) add(input.value);
+        else this.next();
+      } else if (e.key === "Backspace" && !input.value && this.data.categories.length) {
+        this.data.categories.pop();
+        draw();
+      }
+    });
+    box.addEventListener("click", (e) => { if (e.target === box) input.focus(); });
+    draw();
   }
 
   renderPhoto(body) {
@@ -817,6 +977,13 @@ class WishlistModal extends Modal {
   }
 
   next() {
+    // A category typed but not confirmed still counts.
+    if (this.data.categoryDraft.trim()) {
+      for (const c of this.data.categoryDraft.split(",").map((v) => v.trim()).filter(Boolean)) {
+        if (!this.data.categories.includes(c)) this.data.categories.push(c);
+      }
+      this.data.categoryDraft = "";
+    }
     if (this.step === 0 && !this.data.product.trim()) {
       new Notice(this.t("productRequired"));
       return;
@@ -867,7 +1034,7 @@ async function createItem(plugin, data, image) {
     price: parsePrice(data.price, plugin.currency(data.currency)),
     currency: data.currency,
     rank: data.rank && Number.isFinite(typedRank) ? typedRank : props.rank,
-    categories: data.category.trim() ? [data.category.trim()] : [],
+    categories: [...new Set([...data.categories, ...String(data.categoryDraft ?? "").split(",")].map((c) => c.trim()).filter(Boolean))],
     priority: data.priority,
     link: data.link.trim() || null,
     store: data.store.trim() || null,
@@ -881,16 +1048,21 @@ async function createItem(plugin, data, image) {
 }
 
 class ValueSuggest extends AbstractInputSuggest {
-  constructor(app, input, values) {
+  // onPick: called with the chosen value instead of filling the input.
+  // exclude: values that should not be suggested (e.g. chips already added).
+  constructor(app, input, values, onPick = null, exclude = () => []) {
     super(app, input);
     this.input = input;
     this.values = values;
+    this.onPick = onPick;
+    this.exclude = exclude;
     this.isOpen = false;
   }
 
   getSuggestions(query) {
     const q = query.trim().toLowerCase();
-    return this.values.filter((v) => v.toLowerCase().includes(q) && v.toLowerCase() !== q);
+    const taken = this.exclude();
+    return this.values.filter((v) => v.toLowerCase().includes(q) && v.toLowerCase() !== q && !taken.includes(v));
   }
 
   renderSuggestion(value, el) {
@@ -898,8 +1070,12 @@ class ValueSuggest extends AbstractInputSuggest {
   }
 
   selectSuggestion(value) {
-    this.setValue(value);
-    this.input.dispatchEvent(new Event("input"));
+    if (this.onPick) {
+      this.onPick(value);
+    } else {
+      this.setValue(value);
+      this.input.dispatchEvent(new Event("input"));
+    }
     this.close();
   }
 
@@ -1002,3 +1178,4 @@ module.exports.formatPrice = formatPrice;
 module.exports.parsePrice = parsePrice;
 module.exports.createItem = createItem;
 module.exports.buildBase = buildBase;
+module.exports.smartGroups = smartGroups;
