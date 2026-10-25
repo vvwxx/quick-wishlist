@@ -19,6 +19,7 @@ const STRINGS = {
     stepPhoto: "Photo",
     stepReasons: "Why I want it",
     product: "Product",
+    brand: "Brand",
     price: "Price",
     currency: "Currency",
     category: "Categories",
@@ -69,6 +70,8 @@ const STRINGS = {
     setTagDesc: "Added to every item.",
     setExtra: "Extra properties",
     setExtraDesc: "Optional YAML added to every new item, e.g. type: wish",
+    setHidden: "Hidden properties",
+    setHiddenDesc: "Comma-separated. Kept in the note but not shown in the properties of wishlist items, e.g. type",
     setPhotoHeading: "Photo heading",
     setReasonsHeading: "Reasons heading",
     setLinkLabel: "Link label",
@@ -84,6 +87,7 @@ const STRINGS = {
     viewReorder: "Reorder",
     viewPurchased: "Purchased",
     colItem: "Item",
+    colBrand: "Brand",
     colPrice: "Price",
     colAmount: "Amount",
     colCurrency: "Currency",
@@ -108,6 +112,7 @@ const STRINGS = {
     stepPhoto: "Foto",
     stepReasons: "Por que eu quero",
     product: "Produto",
+    brand: "Marca",
     price: "Preço",
     currency: "Moeda",
     category: "Categorias",
@@ -157,6 +162,8 @@ const STRINGS = {
     setTagDesc: "Adicionada a todo item.",
     setExtra: "Propriedades extras",
     setExtraDesc: "YAML opcional adicionado a todo item novo, por exemplo: tipo: desejo",
+    setHidden: "Propriedades escondidas",
+    setHiddenDesc: "Separadas por vírgula. Ficam na nota, mas não aparecem nas propriedades dos itens da wishlist, por exemplo: tipo",
     setPhotoHeading: "Título da foto",
     setReasonsHeading: "Título dos motivos",
     setLinkLabel: "Texto do link",
@@ -219,6 +226,7 @@ const DEFAULT_SETTINGS = {
   folder: "Wishlist",
   tag: "wishlist",
   extraFrontmatter: "",
+  hiddenProperties: "",
   fillNewNotes: true,
   interceptNewButton: true,
 };
@@ -313,6 +321,26 @@ module.exports = class QuickWishlist extends Plugin {
     };
     this.registerDomEvent(document, "click", intercept, { capture: true });
     this.registerDomEvent(document, "keydown", intercept, { capture: true });
+
+    // Hidden properties: open wishlist notes get a class, and a style rule
+    // hides the chosen keys only inside them.
+    this.hiddenStyle = document.head.createEl("style", { attr: { id: "qw-hidden-properties" } });
+    this.register(() => this.hiddenStyle.remove());
+    this.updateHiddenStyle();
+    const mark = () => this.app.workspace.iterateAllLeaves((leaf) => {
+      const file = leaf.view?.file;
+      leaf.view?.containerEl?.toggleClass("qw-wishlist-note", !!file && this.isWishlistNote(file));
+    });
+    this.app.workspace.onLayoutReady(mark);
+    this.registerEvent(this.app.workspace.on("file-open", mark));
+    this.registerEvent(this.app.workspace.on("layout-change", mark));
+    this.register(() => document.querySelectorAll(".qw-wishlist-note").forEach((el) => el.removeClass("qw-wishlist-note")));
+  }
+
+  updateHiddenStyle() {
+    this.hiddenStyle.textContent = this.list(this.settings.hiddenProperties)
+      .map((key) => `.qw-wishlist-note .metadata-property[data-property-key="${CSS.escape(key)}"] { display: none; }`)
+      .join("\n");
   }
 
   get lang() {
@@ -369,7 +397,7 @@ module.exports = class QuickWishlist extends Plugin {
   }
 
   isWishlistNote(file) {
-    return file instanceof TFile && file.extension === "md" && file.parent?.path === this.folder;
+    return file instanceof TFile && file.extension === "md" && file.path.startsWith(`${this.folder}/`);
   }
 
   list(text) {
@@ -426,6 +454,7 @@ module.exports = class QuickWishlist extends Plugin {
   defaultProperties() {
     const s = this.settings;
     return {
+      brand: null,
       ...this.extraFrontmatter(),
       price: null,
       currency: this.currency(s.defaultCurrency).symbol,
@@ -520,6 +549,8 @@ formulas:
 properties:
   file.name:
     displayName: ${JSON.stringify(t("colItem"))}
+  note.brand:
+    displayName: ${JSON.stringify(t("colBrand"))}
   note.rank:
     displayName: "#"
   formula.value:
@@ -545,6 +576,7 @@ views:
     name: ${JSON.stringify(t("viewAll"))}
     order:
       - file.name
+      - brand
       - status
       - formula.value
       - categories
@@ -562,6 +594,7 @@ ${cards}
         - ${status(s.status)}
     order:
       - file.name
+      - brand
       - formula.value
       - categories
       - priority
@@ -578,6 +611,7 @@ ${cards}
         - ${status(s.status)}
     order:
       - file.name
+      - brand
       - categories
       - formula.value
       - formula.buy
@@ -593,6 +627,7 @@ ${cards}
     order:
       - rank
       - file.name
+      - brand
       - price
       - currency
       - formula.value
@@ -609,6 +644,7 @@ ${cards}
         - ${status(s.boughtStatus)}
     order:
       - file.name
+      - brand
       - formula.value
       - purchased
       - store
@@ -765,7 +801,7 @@ class WishlistModal extends Modal {
     const s = plugin.settings;
     this.step = 0;
     this.data = {
-      product: "", price: "", currency: plugin.currency(s.defaultCurrency).symbol, categories: [], categoryDraft: "",
+      product: "", brand: "", price: "", currency: plugin.currency(s.defaultCurrency).symbol, categories: [], categoryDraft: "",
       priority: s.defaultPriority, rank: "", link: "", store: "", reasons: "",
     };
     this.image = null; // { buffer, ext, previewUrl }
@@ -851,6 +887,7 @@ class WishlistModal extends Modal {
   renderDetails(body) {
     const p = this.plugin;
     const product = this.text(body, "product", this.t("product"));
+    this.text(body, "brand", this.t("brand"), { optional: true, suggestions: p.valuesOf("brand") });
 
     const price = this.text(body, "price", this.t("price"), { optional: true });
     price.setAttr("inputmode", "decimal");
@@ -1081,6 +1118,7 @@ async function createItem(plugin, data, image) {
     categories: [...new Set([...data.categories, ...String(data.categoryDraft ?? "").split(",")].map((c) => c.trim()).filter(Boolean))],
     priority: data.priority,
     link: data.link.trim() || null,
+    brand: data.brand.trim() || null,
     store: data.store.trim() || null,
   });
 
@@ -1178,6 +1216,12 @@ class QuickWishlistSettingTab extends PluginSettingTab {
     text("setBoughtStatus", "setBoughtStatusDesc", "boughtStatus");
     text("setTag", "setTagDesc", "tag");
     text("setExtra", "setExtraDesc", "extraFrontmatter", { area: true });
+    new Setting(containerEl).setName(t("setHidden")).setDesc(t("setHiddenDesc"))
+      .addText((c) => c.setValue(p.settings.hiddenProperties ?? "").onChange(async (v) => {
+        p.settings.hiddenProperties = v;
+        await p.saveSettings();
+        p.updateHiddenStyle();
+      }));
     text("setPhotoHeading", null, "photoHeading");
     text("setReasonsHeading", null, "reasonsHeading");
     text("setLinkLabel", "setLinkLabelDesc", "linkLabel");
