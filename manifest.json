@@ -1,7 +1,7 @@
 {
   "id": "quick-wishlist",
   "name": "Quick Wishlist",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "minAppVersion": "1.9.0",
   "description": "Add wishlist items from a keyboard-first form with price formatting, photo paste, ranking and a ready-made base.",
   "author": "vvwxx",

@@ -5,19 +5,210 @@ const {
   AbstractInputSuggest, requestUrl, normalizePath, parseYaml,
 } = require("obsidian");
 
+// Interface text. {name} placeholders are filled by t().
+const STRINGS = {
+  en: {
+    cmdNewItem: "New wishlist item",
+    cmdCreateBase: "Create wishlist base",
+    cmdFillNote: "Fill current note with wishlist properties",
+    cmdTogglePurchased: "Mark as purchased / back to want",
+    formTitle: "New wishlist item",
+    stepDetails: "Details",
+    stepPhoto: "Photo",
+    stepReasons: "Why I want it",
+    product: "Product",
+    price: "Price",
+    currency: "Currency",
+    category: "Category",
+    priority: "Priority",
+    rank: "Rank",
+    link: "Product link",
+    store: "Store",
+    reasons: "Reasons",
+    optional: "optional",
+    next: "Next",
+    back: "Back",
+    save: "Save",
+    hintNext: "Enter: next · Esc: cancel",
+    hintSave: "Ctrl+Enter: save · Esc: cancel",
+    rankPlaceholder: "{rank} (end of the list) · 1.1, 1.2 for related items",
+    pasteHere: "Paste an image or an image link here (Ctrl+V)",
+    pasteOptional: "Optional. Press Enter to skip.",
+    pasteReplace: "Ctrl+V again to replace · Delete to remove",
+    downloading: "Downloading image…",
+    productRequired: "Product is required.",
+    added: "Added to wishlist: {name}",
+    purchased: "Purchased: {name}",
+    backToWant: "Back to want: {name}",
+    imageFailed: "Could not load that image.",
+    saveFailed: "Could not save the item. See the console.",
+    nothingToPaste: "Nothing to paste: copy an image or an image link.",
+    baseExists: "{path} already exists.",
+    badYaml: "Quick Wishlist: extra properties are not valid YAML.",
+    // Settings
+    setLanguage: "Language",
+    setLanguageDesc: "Language of the form and settings. Command names change after restarting Obsidian.",
+    langAuto: "Automatic (same as Obsidian)",
+    setFolder: "Wishlist folder",
+    setFolderDesc: "Where items are created. Notes created here in any other way are filled too.",
+    setCurrencies: "Currencies",
+    setCurrenciesDesc: "One per line: symbol = how 1234.56 is written. Example: R$ = 1.234,56",
+    setDefaultCurrency: "Default currency",
+    setDefaultCurrencyDesc: "Must match one of the symbols above.",
+    setPriorities: "Priorities",
+    setPrioritiesDesc: "Comma-separated, in the order shown in the form.",
+    setDefaultPriority: "Default priority",
+    setStatus: "Status for new items",
+    setStatusDesc: "The base shows these in the Want views.",
+    setBoughtStatus: "Status for purchased items",
+    setBoughtStatusDesc: "The base shows these in the Purchased view.",
+    setTag: "Tag",
+    setTagDesc: "Added to every item.",
+    setExtra: "Extra properties",
+    setExtraDesc: "Optional YAML added to every new item, e.g. type: wish",
+    setPhotoHeading: "Photo heading",
+    setReasonsHeading: "Reasons heading",
+    setLinkLabel: "Link label",
+    setLinkLabelDesc: "Text of the buy link in the base. Applies to bases created after the change.",
+    setIntercept: "Base \"New\" button opens the form",
+    setInterceptDesc: "In bases that show the wishlist folder, the \"New\" button opens this form instead of the small popover.",
+    setFill: "Fill notes created elsewhere",
+    setFillDesc: "Adds the wishlist properties and sections to empty notes created in the folder.",
+    // Base
+    viewAll: "All items",
+    viewWant: "Want",
+    viewByCategory: "By category",
+    viewReorder: "Reorder",
+    viewPurchased: "Purchased",
+    colItem: "Item",
+    colPrice: "Price",
+    colAmount: "Amount",
+    colCurrency: "Currency",
+    colCategories: "Categories",
+    colPriority: "Priority",
+    colStore: "Store",
+    colLink: "Link",
+    colStatus: "Status",
+    colPurchasedOn: "Purchased on",
+    noCategory: "(no category)",
+  },
+  pt: {
+    cmdNewItem: "Novo item da wishlist",
+    cmdCreateBase: "Criar base da wishlist",
+    cmdFillNote: "Completar a nota atual com as propriedades da wishlist",
+    cmdTogglePurchased: "Marcar como comprado / voltar para quero",
+    formTitle: "Novo item da wishlist",
+    stepDetails: "Detalhes",
+    stepPhoto: "Foto",
+    stepReasons: "Por que eu quero",
+    product: "Produto",
+    price: "Preço",
+    currency: "Moeda",
+    category: "Categoria",
+    priority: "Prioridade",
+    rank: "Rank",
+    link: "Link do produto",
+    store: "Loja",
+    reasons: "Motivos",
+    optional: "opcional",
+    next: "Próximo",
+    back: "Voltar",
+    save: "Salvar",
+    hintNext: "Enter: próximo · Esc: cancelar",
+    hintSave: "Ctrl+Enter: salvar · Esc: cancelar",
+    rankPlaceholder: "{rank} (fim da lista) · 1.1, 1.2 para itens relacionados",
+    pasteHere: "Cole aqui uma imagem ou o link de uma imagem (Ctrl+V)",
+    pasteOptional: "Opcional. Aperte Enter para pular.",
+    pasteReplace: "Ctrl+V de novo para trocar · Delete para remover",
+    downloading: "Baixando a imagem…",
+    productRequired: "O produto é obrigatório.",
+    added: "Adicionado à wishlist: {name}",
+    purchased: "Comprado: {name}",
+    backToWant: "De volta para quero: {name}",
+    imageFailed: "Não foi possível carregar essa imagem.",
+    saveFailed: "Não foi possível salvar o item. Veja o console.",
+    nothingToPaste: "Nada para colar: copie uma imagem ou o link de uma imagem.",
+    baseExists: "{path} já existe.",
+    badYaml: "Quick Wishlist: as propriedades extras não são um YAML válido.",
+    setLanguage: "Idioma",
+    setLanguageDesc: "Idioma do formulário e das configurações. Os nomes dos comandos mudam depois de reiniciar o Obsidian.",
+    langAuto: "Automático (igual ao Obsidian)",
+    setFolder: "Pasta da wishlist",
+    setFolderDesc: "Onde os itens são criados. Notas criadas aqui de outro jeito também são completadas.",
+    setCurrencies: "Moedas",
+    setCurrenciesDesc: "Uma por linha: símbolo = como 1234,56 é escrito. Exemplo: $ = 1,234.56",
+    setDefaultCurrency: "Moeda padrão",
+    setDefaultCurrencyDesc: "Precisa ser um dos símbolos acima.",
+    setPriorities: "Prioridades",
+    setPrioritiesDesc: "Separadas por vírgula, na ordem em que aparecem no formulário.",
+    setDefaultPriority: "Prioridade padrão",
+    setStatus: "Status dos itens novos",
+    setStatusDesc: "A base mostra esses itens nas visualizações de Quero.",
+    setBoughtStatus: "Status dos itens comprados",
+    setBoughtStatusDesc: "A base mostra esses itens na visualização Comprados.",
+    setTag: "Tag",
+    setTagDesc: "Adicionada a todo item.",
+    setExtra: "Propriedades extras",
+    setExtraDesc: "YAML opcional adicionado a todo item novo, por exemplo: tipo: desejo",
+    setPhotoHeading: "Título da foto",
+    setReasonsHeading: "Título dos motivos",
+    setLinkLabel: "Texto do link",
+    setLinkLabelDesc: "Texto do link de compra na base. Vale para as bases criadas depois da mudança.",
+    setIntercept: "Botão \"Novo\" da base abre o formulário",
+    setInterceptDesc: "Nas bases que mostram a pasta da wishlist, o botão \"Novo\" abre este formulário no lugar da janelinha.",
+    setFill: "Completar notas criadas de outro jeito",
+    setFillDesc: "Adiciona as propriedades e seções da wishlist às notas vazias criadas na pasta.",
+    viewAll: "Todos",
+    viewWant: "Quero",
+    viewByCategory: "Por categoria",
+    viewReorder: "Reordenar",
+    viewPurchased: "Comprados",
+    colItem: "Item",
+    colPrice: "Preço",
+    colAmount: "Valor",
+    colCurrency: "Moeda",
+    colCategories: "Categorias",
+    colPriority: "Prioridade",
+    colStore: "Loja",
+    colLink: "Link",
+    colStatus: "Status",
+    colPurchasedOn: "Comprado em",
+    noCategory: "(sem categoria)",
+  },
+};
+
+// Values written into notes. Only used as the starting settings, so changing
+// the language later never breaks the filters of existing notes.
+const LOCALE_DEFAULTS = {
+  en: {
+    currencies: "$ = 1,234.56\n€ = 1.234,56\nR$ = 1.234,56",
+    defaultCurrency: "$",
+    priorities: "high, medium, low",
+    defaultPriority: "medium",
+    status: "want",
+    boughtStatus: "purchased",
+    photoHeading: "Photo",
+    reasonsHeading: "Why I want it",
+    linkLabel: "Link to buy",
+  },
+  pt: {
+    currencies: "R$ = 1.234,56\n$ = 1,234.56\n€ = 1.234,56",
+    defaultCurrency: "R$",
+    priorities: "alta, média, baixa",
+    defaultPriority: "média",
+    status: "quero",
+    boughtStatus: "comprado",
+    photoHeading: "Foto",
+    reasonsHeading: "Por que eu quero",
+    linkLabel: "Link para comprar",
+  },
+};
+
 const DEFAULT_SETTINGS = {
+  language: "auto",
   folder: "Wishlist",
-  currencies: "$ = 1,234.56\n€ = 1.234,56\nR$ = 1.234,56",
-  defaultCurrency: "$",
-  priorities: "high, medium, low",
-  defaultPriority: "medium",
-  status: "want",
-  boughtStatus: "bought",
   tag: "wishlist",
   extraFrontmatter: "",
-  photoHeading: "Photo",
-  reasonsHeading: "Why I want it",
-  linkLabel: "Link to buy",
   fillNewNotes: true,
   interceptNewButton: true,
 };
@@ -26,26 +217,49 @@ const IMAGE_TYPES = {
   "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif", "image/avif": "avif",
 };
 
+function obsidianLanguage() {
+  return String(window.localStorage.getItem("language") || window.moment?.locale() || "en").toLowerCase();
+}
+
+function resolveLanguage(setting) {
+  const lang = setting === "auto" || !setting ? obsidianLanguage() : String(setting).toLowerCase();
+  return lang.startsWith("pt") ? "pt" : "en";
+}
+
 module.exports = class QuickWishlist extends Plugin {
   async onload() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const saved = await this.loadData();
+    const lang = resolveLanguage(saved?.language ?? DEFAULT_SETTINGS.language);
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, LOCALE_DEFAULTS[lang], saved);
+    // Old settings name for the purchased status.
+    if (saved && saved.boughtStatus === undefined) this.settings.boughtStatus = LOCALE_DEFAULTS[lang].boughtStatus;
     this.addSettingTab(new QuickWishlistSettingTab(this.app, this));
 
     this.addCommand({
       id: "new-item",
-      name: "New wishlist item",
+      name: this.t("cmdNewItem"),
       callback: () => new WishlistModal(this.app, this).open(),
     });
     this.addCommand({
       id: "create-base",
-      name: "Create wishlist base",
+      name: this.t("cmdCreateBase"),
       callback: () => this.createBase(),
     });
     this.addCommand({
       id: "fill-note",
-      name: "Fill current note with wishlist properties",
+      name: this.t("cmdFillNote"),
       editorCallback: async (_editor, view) => {
         if (view.file) await this.fillNote(view.file, { force: true });
+      },
+    });
+    this.addCommand({
+      id: "toggle-purchased",
+      name: this.t("cmdTogglePurchased"),
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file || !this.isWishlistNote(file)) return false;
+        if (!checking) this.togglePurchased(file).catch(console.error);
+        return true;
       },
     });
 
@@ -78,6 +292,19 @@ module.exports = class QuickWishlist extends Plugin {
     };
     this.registerDomEvent(document, "click", intercept, { capture: true });
     this.registerDomEvent(document, "keydown", intercept, { capture: true });
+  }
+
+  get lang() {
+    return resolveLanguage(this.settings.language);
+  }
+
+  t(key, vars = {}) {
+    const text = STRINGS[this.lang][key] ?? STRINGS.en[key] ?? key;
+    return text.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ""));
+  }
+
+  async saveSettings() {
+    await this.saveData(this.settings);
   }
 
   // Bases whose items live in the wishlist folder, kept in memory so the
@@ -114,10 +341,6 @@ module.exports = class QuickWishlist extends Plugin {
       if (!found && leaf.view?.containerEl?.contains(el)) found = leaf;
     });
     return found;
-  }
-
-  async saveSettings() {
-    await this.saveData(this.settings);
   }
 
   get folder() {
@@ -174,7 +397,7 @@ module.exports = class QuickWishlist extends Plugin {
       const parsed = parseYaml(text);
       return parsed && typeof parsed === "object" ? parsed : {};
     } catch (err) {
-      new Notice("Quick Wishlist: extra properties are not valid YAML.");
+      new Notice(this.t("badYaml"));
       return {};
     }
   }
@@ -198,7 +421,7 @@ module.exports = class QuickWishlist extends Plugin {
 
   sections(embed = "", reasons = "") {
     const s = this.settings;
-    return `## ${s.photoHeading}\n\n${embed}\n\n## ${s.reasonsHeading}\n\n${reasons || "- "}\n`;
+    return `## ${s.photoHeading}\n\n${embed ? `${embed}\n` : ""}\n## ${s.reasonsHeading}\n\n${reasons || "- "}\n`;
   }
 
   async fillNote(file, { force = false } = {}) {
@@ -217,10 +440,23 @@ module.exports = class QuickWishlist extends Plugin {
     });
   }
 
+  // Switches the open item between "want" and "purchased", keeping the date.
+  async togglePurchased(file) {
+    const s = this.settings;
+    let purchased = false;
+    await this.app.fileManager.processFrontMatter(file, (fm) => {
+      purchased = fm.status !== s.boughtStatus;
+      fm.status = purchased ? s.boughtStatus : s.status;
+      if (purchased) fm.purchased = window.moment().format("YYYY-MM-DD");
+      else delete fm.purchased;
+    });
+    new Notice(this.t(purchased ? "purchased" : "backToWant", { name: file.basename }));
+  }
+
   async createBase() {
     const path = normalizePath(`${this.folder}/Wishlist.base`);
     if (this.app.vault.getAbstractFileByPath(path)) {
-      new Notice(`${path} already exists.`);
+      new Notice(this.t("baseExists", { path }));
       return;
     }
     if (!this.app.vault.getAbstractFileByPath(this.folder)) await this.app.vault.createFolder(this.folder);
@@ -245,8 +481,12 @@ function priceFormula(plugin) {
 
 function buildBase(plugin) {
   const s = plugin.settings;
+  const t = (k) => plugin.t(k);
   const q = (text) => `'${String(text).replace(/'/g, "''")}'`;
   const status = (value) => q(`status == ${JSON.stringify(value)}`);
+  const cards = `    image: formula.photo
+    imageAspectRatio: 1
+    cardSize: 300`;
   return `newItemFolder: ${JSON.stringify(plugin.folder)}
 filters:
   and:
@@ -255,75 +495,110 @@ formulas:
   value: ${q(priceFormula(plugin))}
   buy: ${q(`if(link.isEmpty(), "", link(link, ${JSON.stringify(s.linkLabel)}))`)}
   photo: ${q('file.embeds.filter(value.toString().lower().containsAny(".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif"))[0]')}
+  main_category: ${q(`if(categories.isEmpty(), ${JSON.stringify(t("noCategory"))}, list(categories)[0])`)}
 properties:
   file.name:
-    displayName: Item
+    displayName: ${JSON.stringify(t("colItem"))}
   note.rank:
     displayName: "#"
   formula.value:
-    displayName: Price
+    displayName: ${JSON.stringify(t("colPrice"))}
+  note.price:
+    displayName: ${JSON.stringify(t("colAmount"))}
+  note.currency:
+    displayName: ${JSON.stringify(t("colCurrency"))}
+  note.categories:
+    displayName: ${JSON.stringify(t("colCategories"))}
+  note.priority:
+    displayName: ${JSON.stringify(t("colPriority"))}
+  note.store:
+    displayName: ${JSON.stringify(t("colStore"))}
   formula.buy:
-    displayName: Link
+    displayName: ${JSON.stringify(t("colLink"))}
+  note.status:
+    displayName: ${JSON.stringify(t("colStatus"))}
+  note.purchased:
+    displayName: ${JSON.stringify(t("colPurchasedOn"))}
 views:
   - type: cards
-    name: Want
+    name: ${JSON.stringify(t("viewAll"))}
+    order:
+      - file.name
+      - status
+      - formula.value
+      - categories
+      - priority
+      - store
+      - formula.buy
+    sort:
+      - property: rank
+        direction: ASC
+${cards}
+  - type: cards
+    name: ${JSON.stringify(t("viewWant"))}
     filters:
       and:
         - ${status(s.status)}
+    order:
+      - file.name
+      - formula.value
+      - categories
+      - priority
+      - store
+      - formula.buy
+    sort:
+      - property: rank
+        direction: ASC
+${cards}
+  - type: cards
+    name: ${JSON.stringify(t("viewByCategory"))}
+    filters:
+      and:
+        - ${status(s.status)}
+    groupBy:
+      property: formula.main_category
+      direction: ASC
     order:
       - file.name
       - categories
       - formula.value
       - formula.buy
       - priority
-      - store
     sort:
       - property: rank
         direction: ASC
-    image: formula.photo
-  - type: cards
-    name: By category
-    filters:
-      and:
-        - ${status(s.status)}
-    groupBy:
-      property: note.categories
-      direction: ASC
-    order:
-      - file.name
-      - formula.value
-      - formula.buy
-      - priority
-    sort:
-      - property: rank
-        direction: ASC
-    image: formula.photo
+${cards}
   - type: table
-    name: Reorder
+    name: ${JSON.stringify(t("viewReorder"))}
     filters:
       and:
         - ${status(s.status)}
     order:
       - rank
       - file.name
-      - categories
       - price
       - currency
       - formula.value
+      - categories
       - priority
+      - store
     sort:
       - property: rank
         direction: ASC
   - type: table
-    name: Bought
+    name: ${JSON.stringify(t("viewPurchased"))}
     filters:
       and:
         - ${status(s.boughtStatus)}
     order:
       - file.name
       - formula.value
-      - formula.buy
+      - purchased
       - store
+      - formula.buy
+    sort:
+      - property: purchased
+        direction: DESC
 `;
 }
 
@@ -342,6 +617,10 @@ class WishlistModal extends Modal {
     this.image = null; // { buffer, ext, previewUrl }
   }
 
+  t(key, vars) {
+    return this.plugin.t(key, vars);
+  }
+
   onOpen() {
     this.containerEl.addClass("qw-modal");
     this.scope.register(["Mod"], "Enter", () => { this.save(); return false; });
@@ -356,12 +635,12 @@ class WishlistModal extends Modal {
   render() {
     const { contentEl } = this;
     contentEl.empty();
-    const titles = ["Details", "Photo", "Why I want it"];
+    const titles = [this.t("stepDetails"), this.t("stepPhoto"), this.t("stepReasons")];
     const head = contentEl.createDiv("qw-head");
-    head.createEl("h2", { text: "New wishlist item" });
+    head.createEl("h2", { text: this.t("formTitle") });
     const steps = head.createDiv("qw-steps");
-    titles.forEach((t, i) => steps.createSpan({
-      text: `${i + 1}. ${t}`, cls: i === this.step ? "is-active" : i < this.step ? "is-done" : "",
+    titles.forEach((title, i) => steps.createSpan({
+      text: `${i + 1}. ${title}`, cls: i === this.step ? "is-active" : i < this.step ? "is-done" : "",
     }));
 
     const body = contentEl.createDiv("qw-body");
@@ -370,20 +649,17 @@ class WishlistModal extends Modal {
     if (this.step === 2) this.renderReasons(body);
 
     const footer = contentEl.createDiv("qw-footer");
-    footer.createSpan({
-      cls: "qw-hint",
-      text: this.step < 2 ? "Enter: next · Esc: cancel" : "Ctrl+Enter: save · Esc: cancel",
-    });
+    footer.createSpan({ cls: "qw-hint", text: this.t(this.step < 2 ? "hintNext" : "hintSave") });
     const buttons = footer.createDiv("qw-buttons");
-    if (this.step > 0) buttons.createEl("button", { text: "Back" }).onclick = () => this.go(this.step - 1);
-    const main = buttons.createEl("button", { text: this.step < 2 ? "Next" : "Save", cls: "mod-cta" });
+    if (this.step > 0) buttons.createEl("button", { text: this.t("back") }).onclick = () => this.go(this.step - 1);
+    const main = buttons.createEl("button", { text: this.t(this.step < 2 ? "next" : "save"), cls: "mod-cta" });
     main.onclick = () => (this.step < 2 ? this.next() : this.save());
   }
 
   field(parent, label, optional) {
     const row = parent.createDiv("qw-field");
     const el = row.createEl("label", { text: label });
-    if (optional) el.createSpan({ text: " optional", cls: "qw-optional" });
+    if (optional) el.createSpan({ text: ` ${this.t("optional")}`, cls: "qw-optional" });
     return row;
   }
 
@@ -420,9 +696,9 @@ class WishlistModal extends Modal {
 
   renderDetails(body) {
     const p = this.plugin;
-    const product = this.text(body, "product", "Product");
+    const product = this.text(body, "product", this.t("product"));
 
-    const price = this.text(body, "price", "Price", { optional: true });
+    const price = this.text(body, "price", this.t("price"), { optional: true });
     price.setAttr("inputmode", "decimal");
     price.addEventListener("input", () => {
       price.value = formatPrice(price.value, p.currency(this.data.currency));
@@ -431,7 +707,7 @@ class WishlistModal extends Modal {
 
     const symbols = p.currencies().map((c) => c.symbol);
     let previous = this.data.currency;
-    this.select(body, "currency", "Currency", symbols, () => {
+    this.select(body, "currency", this.t("currency"), symbols, () => {
       // Re-read the typed number with the new currency's separators.
       const n = parsePrice(this.data.price, p.currency(previous));
       const c = p.currency(this.data.currency);
@@ -440,19 +716,19 @@ class WishlistModal extends Modal {
       previous = this.data.currency;
     });
 
-    this.text(body, "category", "Category", { optional: true, suggestions: p.valuesOf("categories") });
-    this.select(body, "priority", "Priority", p.list(p.settings.priorities));
+    this.text(body, "category", this.t("category"), { optional: true, suggestions: p.valuesOf("categories") });
+    this.select(body, "priority", this.t("priority"), p.list(p.settings.priorities));
 
-    const rank = this.text(body, "rank", "Rank", { optional: true });
-    rank.setAttrs({ inputmode: "decimal", placeholder: `${p.nextRank()} (end of the list) · 1.1, 1.2 for related items` });
+    const rank = this.text(body, "rank", this.t("rank"), { optional: true });
+    rank.setAttrs({ inputmode: "decimal", placeholder: this.t("rankPlaceholder", { rank: p.nextRank() }) });
     rank.addEventListener("input", () => {
       const [int, ...rest] = rank.value.replace(/,/g, ".").replace(/[^0-9.]/g, "").split(".");
       rank.value = rest.length ? `${int}.${rest.join("")}` : int;
       this.data.rank = rank.value;
     });
 
-    this.text(body, "link", "Product link", { optional: true });
-    this.text(body, "store", "Store", { optional: true, suggestions: p.valuesOf("store") });
+    this.text(body, "link", this.t("link"), { optional: true });
+    this.text(body, "store", this.t("store"), { optional: true, suggestions: p.valuesOf("store") });
     window.setTimeout(() => product.focus(), 0);
   }
 
@@ -462,10 +738,10 @@ class WishlistModal extends Modal {
       zone.empty();
       if (this.image) {
         zone.createEl("img", { attr: { src: this.image.previewUrl } });
-        zone.createDiv({ text: "Ctrl+V again to replace · Delete to remove", cls: "qw-hint" });
+        zone.createDiv({ text: this.t("pasteReplace"), cls: "qw-hint" });
       } else {
-        zone.createDiv({ text: "Paste an image or an image link here (Ctrl+V)", cls: "qw-drop-title" });
-        zone.createDiv({ text: "Optional. Press Enter to skip.", cls: "qw-hint" });
+        zone.createDiv({ text: this.t("pasteHere"), cls: "qw-drop-title" });
+        zone.createDiv({ text: this.t("pasteOptional"), cls: "qw-hint" });
       }
     };
     show();
@@ -478,17 +754,17 @@ class WishlistModal extends Modal {
         } else {
           const url = (e.clipboardData?.getData("text") ?? "").trim();
           if (!/^https?:\/\//i.test(url)) {
-            new Notice("Nothing to paste: copy an image or an image link.");
+            new Notice(this.t("nothingToPaste"));
             return;
           }
           zone.empty();
-          zone.createDiv({ text: "Downloading image…", cls: "qw-hint" });
+          zone.createDiv({ text: this.t("downloading"), cls: "qw-hint" });
           const res = await requestUrl({ url });
           this.setImage(res.arrayBuffer, res.headers["content-type"] ?? "");
         }
       } catch (err) {
         console.error(err);
-        new Notice("Could not load that image.");
+        new Notice(this.t("imageFailed"));
       }
       show();
     });
@@ -511,7 +787,7 @@ class WishlistModal extends Modal {
   }
 
   renderReasons(body) {
-    const row = this.field(body, "Reasons", true);
+    const row = this.field(body, this.t("reasons"), true);
     const area = row.createEl("textarea", { cls: "qw-reasons" });
     // Works as a bulleted list: starts with "- " and every Enter adds a new "- ".
     area.value = this.data.reasons || "- ";
@@ -542,7 +818,7 @@ class WishlistModal extends Modal {
 
   next() {
     if (this.step === 0 && !this.data.product.trim()) {
-      new Notice("Product is required.");
+      new Notice(this.t("productRequired"));
       return;
     }
     if (this.step < 2) this.go(this.step + 1);
@@ -553,18 +829,18 @@ class WishlistModal extends Modal {
     if (this.saving) return;
     if (!this.data.product.trim()) {
       this.go(0);
-      new Notice("Product is required.");
+      new Notice(this.t("productRequired"));
       return;
     }
     this.saving = true;
     try {
       const file = await createItem(this.plugin, this.data, this.image);
       this.close();
-      new Notice(`Added to wishlist: ${file.basename}`);
+      new Notice(this.t("added", { name: file.basename }));
       await this.app.workspace.getLeaf(false).openFile(file);
     } catch (err) {
       console.error(err);
-      new Notice("Could not save the item. See the console.");
+      new Notice(this.t("saveFailed"));
     } finally {
       this.saving = false;
     }
@@ -647,49 +923,52 @@ class QuickWishlistSettingTab extends PluginSettingTab {
   display() {
     const { containerEl } = this;
     const p = this.plugin;
+    const t = (k) => p.t(k);
     containerEl.empty();
 
+    new Setting(containerEl).setName(t("setLanguage")).setDesc(t("setLanguageDesc"))
+      .addDropdown((d) => d
+        .addOption("auto", t("langAuto"))
+        .addOption("en", "English")
+        .addOption("pt-BR", "Português (Brasil)")
+        .setValue(p.settings.language)
+        .onChange(async (v) => {
+          p.settings.language = v;
+          await p.saveSettings();
+          this.display();
+        }));
+
     const text = (name, desc, key, { area = false } = {}) => {
-      new Setting(containerEl).setName(name).setDesc(desc)[area ? "addTextArea" : "addText"]((c) => c
-        .setPlaceholder(String(DEFAULT_SETTINGS[key]))
+      new Setting(containerEl).setName(t(name)).setDesc(desc ? t(desc) : "")[area ? "addTextArea" : "addText"]((c) => c
         .setValue(String(p.settings[key] ?? ""))
         .onChange(async (v) => { p.settings[key] = v; await p.saveSettings(); }));
     };
 
-    new Setting(containerEl).setName("Wishlist folder")
-      .setDesc("Where items are created. Notes created here in any other way are filled too.")
+    new Setting(containerEl).setName(t("setFolder")).setDesc(t("setFolderDesc"))
       .addText((c) => c.setPlaceholder(DEFAULT_SETTINGS.folder).setValue(p.settings.folder).onChange(async (v) => {
         p.settings.folder = v;
         await p.saveSettings();
         await p.indexBases();
       }));
-    text("Currencies", "One per line: symbol = how 1234.56 is written. Example: R$ = 1.234,56", "currencies", { area: true });
-    text("Default currency", "Must match one of the symbols above.", "defaultCurrency");
-    text("Priorities", "Comma-separated, in the order shown in the form.", "priorities");
-    text("Default priority", "", "defaultPriority");
-    text("Status for new items", "The base shows these in the Want views.", "status");
-    text("Status for bought items", "The base shows these in the Bought view.", "boughtStatus");
-    text("Tag", "Added to every item.", "tag");
-    text("Extra properties", "Optional YAML added to every new item, e.g. type: wish", "extraFrontmatter", { area: true });
-    text("Photo heading", "", "photoHeading");
-    text("Reasons heading", "", "reasonsHeading");
-    text("Link label", "Text of the buy link in the base. Run \"Create wishlist base\" again (after deleting the old base) to apply.", "linkLabel");
+    text("setCurrencies", "setCurrenciesDesc", "currencies", { area: true });
+    text("setDefaultCurrency", "setDefaultCurrencyDesc", "defaultCurrency");
+    text("setPriorities", "setPrioritiesDesc", "priorities");
+    text("setDefaultPriority", null, "defaultPriority");
+    text("setStatus", "setStatusDesc", "status");
+    text("setBoughtStatus", "setBoughtStatusDesc", "boughtStatus");
+    text("setTag", "setTagDesc", "tag");
+    text("setExtra", "setExtraDesc", "extraFrontmatter", { area: true });
+    text("setPhotoHeading", null, "photoHeading");
+    text("setReasonsHeading", null, "reasonsHeading");
+    text("setLinkLabel", "setLinkLabelDesc", "linkLabel");
 
-    new Setting(containerEl)
-      .setName("Base \"New\" button opens the form")
-      .setDesc("In bases that show the wishlist folder, the \"New\" button opens this form instead of the small popover.")
-      .addToggle((t) => t.setValue(p.settings.interceptNewButton).onChange(async (v) => {
-        p.settings.interceptNewButton = v;
+    const toggle = (name, desc, key) => new Setting(containerEl).setName(t(name)).setDesc(t(desc))
+      .addToggle((c) => c.setValue(p.settings[key]).onChange(async (v) => {
+        p.settings[key] = v;
         await p.saveSettings();
       }));
-
-    new Setting(containerEl)
-      .setName("Fill notes created elsewhere")
-      .setDesc("Adds the wishlist properties and sections to empty notes created in the folder, e.g. by the base \"New\" button.")
-      .addToggle((t) => t.setValue(p.settings.fillNewNotes).onChange(async (v) => {
-        p.settings.fillNewNotes = v;
-        await p.saveSettings();
-      }));
+    toggle("setIntercept", "setInterceptDesc", "interceptNewButton");
+    toggle("setFill", "setFillDesc", "fillNewNotes");
   }
 }
 

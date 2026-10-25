@@ -1,33 +1,38 @@
 # Quick Wishlist
 
-An Obsidian plugin to keep a wishlist without touching the mouse.
+*[Leia em português](README.pt-BR.md)*
 
-Press a hotkey and a three-step form opens in the middle of the screen:
+Quick Wishlist is an Obsidian plugin for keeping a wishlist without leaving the keyboard.
 
-1. **Details**: product, price, currency, category, priority, rank, link and store
-2. **Photo**: paste an image or an image link with Ctrl+V
-3. **Why I want it**: your reasons, one per line
+Press a shortcut, fill in a short form and the item becomes a note, with a photo, the price and the reasons you want it.
 
-Each item becomes a note in your wishlist folder, with its properties filled in and the photo saved as an attachment.
+## How it works
 
-## Features
+1. **Details:** name, price, category, priority, rank, link and store.
+2. **Photo:** paste an image or an image link.
+3. **Why I want it:** a few reasons, one per line.
 
-- **Keyboard first.** Enter goes to the next step, Ctrl/Cmd+Enter saves, Esc cancels.
-- **Price formatting while you type.** `6000` becomes `6,000` or `6.000` depending on the currency. Each currency has its own separators.
-- **Photo paste.** Paste a copied image or an image URL; the plugin downloads it and stores it where your attachment settings say.
-- **Ranking.** Leave it empty to add the item at the end, or use decimals such as `1.1` and `1.2` to keep related items together.
-- **Suggestions.** Category and store suggest the values you already used.
-- **Ready-made base.** The command *Create wishlist base* creates a [Bases](https://help.obsidian.md/bases) file with four views: *Want* (cards with the photo), *By category*, *Reorder* (edit the rank inline) and *Bought*. Prices show formatted and the link appears as *Link to buy*.
-- **The base "New" button opens the same form**, instead of the small popover.
-- **Notes created any other way** in the wishlist folder get the same properties and sections.
+Enter goes to the next step, Ctrl+Enter saves and Esc cancels.
+
+## What else it does
+
+- Formats the price as you type (`6000` becomes `6,000` or `6.000`, depending on the currency).
+- Suggests the categories and stores you've used before.
+- Orders items by rank. Use `1.1` and `1.2` to keep related items together.
+- Creates a ready-made base to browse the list: cards with photos, by category, to reorder, and what you've already bought.
+- Makes the base "New" button open the same form.
+- Works in English and Portuguese.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| New wishlist item | Opens the form. Assign it a hotkey in *Settings → Hotkeys*. |
-| Create wishlist base | Creates `Wishlist.base` inside the wishlist folder. |
-| Fill current note with wishlist properties | Adds missing properties and sections to the open note. |
+| New wishlist item | Opens the form. |
+| Create wishlist base | Creates the base with the list views. |
+| Mark as purchased / back to want | Moves the open item to Purchased, with today's date, or back to the list. |
+| Fill current note with wishlist properties | Adds the missing properties and sections to the open note. |
+
+None of them come with a shortcut. Pick yours in Settings → Hotkeys.
 
 ## Note format
 
@@ -47,30 +52,27 @@ tags:
   - wishlist
 ---
 ## Photo
+
 ![[Product.png]]
 
 ## Why I want it
+
 - Reason one
+- Reason two
 ```
 
-## Settings
+## Install
 
-- **Wishlist folder** where items are created.
-- **Currencies**, one per line, written as `symbol = 1,234.56`, showing how that currency writes thousands and decimals. Example: `R$ = 1.234,56`.
-- **Default currency**, **priorities** and **default priority**.
-- **Status** for new and bought items, and the **tag** added to every item.
-- **Extra properties**: YAML added to every new item.
-- **Headings** of the photo and reasons sections, and the **link label** used by the base.
-- Toggles for the base "New" button and for filling notes created elsewhere.
+It's not in the plugin store yet. For now:
 
-## Installation
+1. Download `main.js`, `manifest.json` and `styles.css` from the [latest release](https://github.com/vvwxx/quick-wishlist/releases/latest).
+2. Put them in `.obsidian/plugins/quick-wishlist/` inside your vault.
+3. Turn it on in Settings → Community plugins, and give "New wishlist item" a shortcut in Settings → Hotkeys.
 
-Until the plugin is in the community list, install it manually or with [BRAT](https://github.com/TfTHacker/obsidian42-brat):
+Then run "Create wishlist base" once to get the views.
 
-1. Download `main.js`, `manifest.json` and `styles.css` from the latest release.
-2. Put them in `<your vault>/.obsidian/plugins/quick-wishlist/`.
-3. Enable *Quick Wishlist* in *Settings → Community plugins*.
+Folder, currencies, priorities and the rest are in the plugin settings.
 
 ## License
 
-[MIT](LICENSE)
+MIT
