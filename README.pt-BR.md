@@ -8,7 +8,7 @@ Você aperta um atalho, preenche um formulário curto e o item vira uma nota, co
 
 ## Como funciona
 
-1. **Detalhes:** nome, preço, categoria, prioridade, rank, link e loja.
+1. **Detalhes:** nome, preço, categorias, prioridade, rank, link e loja.
 2. **Foto:** cole uma imagem ou o link de uma imagem.
 3. **Por que eu quero:** alguns motivos, um por linha.
 
@@ -18,6 +18,7 @@ Enter vai para a próxima etapa, Ctrl+Enter salva e Esc cancela.
 
 - Formata o preço enquanto você digita (`6000` vira `6.000` ou `6,000`, conforme a moeda).
 - Sugere as categorias e lojas que você já usou.
+- Agrupa a lista por categoria sozinho: cada item aparece uma vez, na categoria mais específica, e os itens sem par vão para Outros.
 - Ordena os itens por um rank. Use `1.1` e `1.2` para deixar itens relacionados juntos.
 - Cria uma base pronta para ver a lista: cartões com foto, por categoria, para reordenar e o que já foi comprado.
 - Faz o botão "Novo" da base abrir o mesmo formulário.

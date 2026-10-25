@@ -95,6 +95,7 @@ const STRINGS = {
     colPurchasedOn: "Purchased on",
     noCategory: "(no category)",
     viewSmart: "Smart categories",
+    others: "Others",
     emptyView: "No items yet.",
   },
   pt: {
@@ -181,6 +182,7 @@ const STRINGS = {
     colPurchasedOn: "Comprado em",
     noCategory: "(sem categoria)",
     viewSmart: "Categorias inteligentes",
+    others: "Outros",
     emptyView: "Nenhum item ainda.",
   },
 };
@@ -624,9 +626,9 @@ ${cards}
 // 3. Otherwise the biggest category wins, then the order the user typed.
 // 4. If the others' choices would leave an item alone, it moves to its next
 //    best category.
-// Items whose categories are all their own stay in their first one.
+// Items left without a pair (or without categories) go to "Others", last.
 // Biggest groups first.
-function smartGroups(items, categoriesOf, noCategory) {
+function smartGroups(items, categoriesOf, others) {
   const catsOf = new Map(items.map((item) => [item, categoriesOf(item)]));
   const members = new Map();
   for (const [item, cats] of catsOf) {
@@ -644,7 +646,7 @@ function smartGroups(items, categoriesOf, noCategory) {
     for (const [item, cats] of catsOf) {
       const candidates = cats.filter((c) => members.get(c).size >= 2 && !banned.get(item)?.has(c));
       if (!candidates.length) {
-        assignment.set(item, cats[0] ?? noCategory);
+        assignment.set(item, others);
         continue;
       }
       const specific = candidates.filter((c) => !candidates.some((d) => isSubcategory(d, c)));
@@ -655,21 +657,28 @@ function smartGroups(items, categoriesOf, noCategory) {
     for (const g of assignment.values()) size.set(g, (size.get(g) ?? 0) + 1);
     let changed = false;
     for (const [item, g] of assignment) {
-      if (size.get(g) === 1 && (members.get(g)?.size ?? 0) >= 2) {
-        (banned.get(item) ?? banned.set(item, new Set()).get(item)).add(g);
-        changed = true;
-      }
+      if (size.get(g) !== 1 || (members.get(g)?.size ?? 0) < 2) continue;
+      // Only move items that have somewhere else to go; the rest wait, since
+      // someone may join them in the next round.
+      const alternatives = catsOf.get(item).filter((c) =>
+        c !== g && members.get(c).size >= 2 && !banned.get(item)?.has(c));
+      if (!alternatives.length) continue;
+      (banned.get(item) ?? banned.set(item, new Set()).get(item)).add(g);
+      changed = true;
     }
     if (!changed) break;
   }
 
+  const size = new Map();
+  for (const g of assignment.values()) size.set(g, (size.get(g) ?? 0) + 1);
   const groups = new Map();
   for (const item of items) {
-    const g = assignment.get(item);
+    let g = assignment.get(item);
+    if (size.get(g) < 2) g = others;
     (groups.get(g) ?? groups.set(g, []).get(g)).push(item);
   }
   return [...groups.entries()].sort(([a, x], [b, y]) =>
-    (a === noCategory) - (b === noCategory) || y.length - x.length || a.localeCompare(b));
+    (a === others) - (b === others) || y.length - x.length || a.localeCompare(b));
 }
 
 const SmartCategoriesView = BasesView ? class extends BasesView {
@@ -707,7 +716,7 @@ const SmartCategoriesView = BasesView ? class extends BasesView {
       return;
     }
     const props = (this.config?.getOrder?.() ?? []).filter((p) => p !== "file.name");
-    for (const [name, items] of smartGroups(entries, (e) => this.categoriesOf(e), this.plugin.t("noCategory"))) {
+    for (const [name, items] of smartGroups(entries, (e) => this.categoriesOf(e), this.plugin.t("others"))) {
       const group = root.createDiv("qw-smart-group");
       const head = group.createDiv("qw-smart-heading");
       head.createSpan({ text: name });

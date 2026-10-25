@@ -8,7 +8,7 @@ Press a shortcut, fill in a short form and the item becomes a note, with a photo
 
 ## How it works
 
-1. **Details:** name, price, category, priority, rank, link and store.
+1. **Details:** name, price, categories, priority, rank, link and store.
 2. **Photo:** paste an image or an image link.
 3. **Why I want it:** a few reasons, one per line.
 
@@ -18,6 +18,7 @@ Enter goes to the next step, Ctrl+Enter saves and Esc cancels.
 
 - Formats the price as you type (`6000` becomes `6,000` or `6.000`, depending on the currency).
 - Suggests the categories and stores you've used before.
+- Groups the list by category on its own: each item shows up once, in its most specific category, and items without a pair go to Others.
 - Orders items by rank. Use `1.1` and `1.2` to keep related items together.
 - Creates a ready-made base to browse the list: cards with photos, by category, to reorder, and what you've already bought.
 - Makes the base "New" button open the same form.
