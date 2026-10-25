@@ -617,21 +617,56 @@ ${cards}
 `;
 }
 
-// Groups items by category, "smartly": an item shows up in every category it
-// shares with at least one other item, never alone in a group of its own,
-// unless all its categories are solo; then it stays in the first one.
+// Puts every item in exactly one category group, picking the best one:
+// 1. Only categories shared by 2+ items count (no group of one by accident).
+// 2. A subcategory wins: if every item of A is also in B, A is the more
+//    specific group (underwear inside clothes).
+// 3. Otherwise the biggest category wins, then the order the user typed.
+// 4. If the others' choices would leave an item alone, it moves to its next
+//    best category.
+// Items whose categories are all their own stay in their first one.
 // Biggest groups first.
 function smartGroups(items, categoriesOf, noCategory) {
-  const count = new Map();
-  for (const item of items) for (const c of categoriesOf(item)) count.set(c, (count.get(c) ?? 0) + 1);
+  const catsOf = new Map(items.map((item) => [item, categoriesOf(item)]));
+  const members = new Map();
+  for (const [item, cats] of catsOf) {
+    for (const c of cats) (members.get(c) ?? members.set(c, new Set()).get(c)).add(item);
+  }
+  const isSubcategory = (a, b) => {
+    const A = members.get(a), B = members.get(b);
+    return a !== b && A.size < B.size && [...A].every((item) => B.has(item));
+  };
+
+  const banned = new Map();
+  let assignment = new Map();
+  for (let round = 0; round < 20; round++) {
+    assignment = new Map();
+    for (const [item, cats] of catsOf) {
+      const candidates = cats.filter((c) => members.get(c).size >= 2 && !banned.get(item)?.has(c));
+      if (!candidates.length) {
+        assignment.set(item, cats[0] ?? noCategory);
+        continue;
+      }
+      const specific = candidates.filter((c) => !candidates.some((d) => isSubcategory(d, c)));
+      specific.sort((a, b) => members.get(b).size - members.get(a).size || cats.indexOf(a) - cats.indexOf(b));
+      assignment.set(item, specific[0]);
+    }
+    const size = new Map();
+    for (const g of assignment.values()) size.set(g, (size.get(g) ?? 0) + 1);
+    let changed = false;
+    for (const [item, g] of assignment) {
+      if (size.get(g) === 1 && (members.get(g)?.size ?? 0) >= 2) {
+        (banned.get(item) ?? banned.set(item, new Set()).get(item)).add(g);
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+
   const groups = new Map();
-  const add = (c, item) => (groups.get(c) ?? groups.set(c, []).get(c)).push(item);
   for (const item of items) {
-    const cats = categoriesOf(item);
-    if (!cats.length) { add(noCategory, item); continue; }
-    const shared = cats.filter((c) => count.get(c) >= 2);
-    if (shared.length) shared.forEach((c) => add(c, item));
-    else add(cats.reduce((best, c) => (count.get(c) > count.get(best) ? c : best), cats[0]), item);
+    const g = assignment.get(item);
+    (groups.get(g) ?? groups.set(g, []).get(g)).push(item);
   }
   return [...groups.entries()].sort(([a, x], [b, y]) =>
     (a === noCategory) - (b === noCategory) || y.length - x.length || a.localeCompare(b));
