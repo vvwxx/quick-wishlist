@@ -2,9 +2,12 @@
 
 const {
   Plugin, Modal, Notice, TFile, PluginSettingTab, Setting, Keymap,
-  AbstractInputSuggest, BasesView, requestUrl, normalizePath, parseYaml,
+  AbstractInputSuggest, BasesView, MarkdownRenderChild, requestUrl, normalizePath, parseYaml,
 } = require("obsidian");
 const { resolveLanguage, createT } = require("./kit/i18n");
+const { formatMoney, formatDate } = require("./kit/format");
+const { readItems, writeBlock } = require("./kit/blocks");
+const { renderHeader, renderEditableList } = require("./kit/page");
 
 const SMART_VIEW = "qw-smart-categories";
 
@@ -88,7 +91,6 @@ const STRINGS = {
     setExtraDesc: "Optional YAML added to every new item, e.g. type: wish",
     setHidden: "Hidden properties",
     setHiddenDesc: "Comma-separated. Kept in the note but not shown in the properties of wishlist items, e.g. type",
-    setPhotoHeading: "Photo heading",
     setReasonsHeading: "Reasons heading",
     setLinkLabel: "Link label",
     setLinkLabelDesc: "Text of the buy link in the base. Applies to bases created after the change.",
@@ -104,6 +106,14 @@ const STRINGS = {
     viewPurchased: "Purchased",
     colItem: "Item",
     colBrand: "Brand",
+    pageBuy: "Buy ↗",
+    pageMarkBought: "Mark as purchased",
+    pageBackToWant: "Back to the list",
+    pagePriority: "{priority} priority",
+    pageStore: "{store} (store)",
+    pageBoughtOn: "purchased on {date}",
+    pageReasonPlaceholder: "New reason… (Enter adds)",
+    pageReasonsEmpty: "Why do you want it? What changes once you have it?",
     colPrice: "Price",
     colAmount: "Amount",
     colCurrency: "Currency",
@@ -195,7 +205,6 @@ const STRINGS = {
     setExtraDesc: "YAML opcional adicionado a todo item novo, por exemplo: tipo: desejo",
     setHidden: "Propriedades escondidas",
     setHiddenDesc: "Separadas por vírgula. Ficam na nota, mas não aparecem nas propriedades dos itens da wishlist, por exemplo: tipo",
-    setPhotoHeading: "Título da foto",
     setReasonsHeading: "Título dos motivos",
     setLinkLabel: "Texto do link",
     setLinkLabelDesc: "Texto do link de compra na base. Vale para as bases criadas depois da mudança.",
@@ -209,6 +218,15 @@ const STRINGS = {
     viewReorder: "Reordenar",
     viewPurchased: "Comprados",
     colItem: "Item",
+    colBrand: "Marca",
+    pageBuy: "Comprar ↗",
+    pageMarkBought: "Marcar como comprado",
+    pageBackToWant: "Voltar para a lista",
+    pagePriority: "prioridade {priority}",
+    pageStore: "{store} (loja)",
+    pageBoughtOn: "comprado em {date}",
+    pageReasonPlaceholder: "Novo motivo… (Enter adiciona)",
+    pageReasonsEmpty: "Por que você quer isso? O que muda quando tiver?",
     colPrice: "Preço",
     colAmount: "Valor",
     colCurrency: "Moeda",
@@ -276,6 +294,20 @@ module.exports = class QuickWishlist extends Plugin {
     // Old settings name for the purchased status.
     if (saved && saved.boughtStatus === undefined) this.settings.boughtStatus = LOCALE_DEFAULTS[lang].boughtStatus;
     this.addSettingTab(new QuickWishlistSettingTab(this.app, this));
+
+    // Note page: header with photo and summary, and the editable list of reasons.
+    this.registerMarkdownCodeBlockProcessor("wish", (_src, el, ctx) => ctx.addChild(new WishPage(this, el, ctx.sourcePath)));
+    this.registerMarkdownCodeBlockProcessor("reasons", (src, el, ctx) => {
+      const file = this.app.vault.getFileByPath(ctx.sourcePath);
+      if (!file) return;
+      const save = (items) => this.app.vault.process(file,
+        (text) => writeBlock(text, "reasons", this.settings.reasonsHeading, items.map((x) => `- ${x}`)));
+      renderEditableList(el.createDiv("kit-section"), readItems(src), save, {
+        t: (k, v) => this.t(k, v),
+        placeholder: this.t("pageReasonPlaceholder"),
+        empty: this.t("pageReasonsEmpty"),
+      });
+    });
 
     this.addCommand({
       id: "new-item",
@@ -491,9 +523,23 @@ module.exports = class QuickWishlist extends Plugin {
     };
   }
 
-  sections(embed = "", reasons = "") {
-    const s = this.settings;
-    return `## ${s.photoHeading}\n\n${embed ? `${embed}\n` : ""}\n## ${s.reasonsHeading}\n\n${reasons || "- "}\n`;
+  // Body of a new note. The photo lives in the "cover" property.
+  sections(reasons = "") {
+    return `\`\`\`wish\n\`\`\`\n\n## ${this.settings.reasonsHeading}\n\n\`\`\`reasons\n${reasons ? reasons + "\n" : ""}\`\`\`\n`;
+  }
+
+  // Image of an item: the "cover" property, or the first image embedded in the note (old notes).
+  coverOf(file) {
+    const cache = this.app.metadataCache.getFileCache(file);
+    let link = String(cache?.frontmatter?.cover ?? "").trim().replace(/^!?\[\[|\]\]$/g, "").split("|")[0];
+    if (!link) {
+      link = (cache?.embeds ?? []).map((e) => e.link.split("|")[0])
+        .find((l) => IMAGE_EXTENSIONS.includes(l.split(".").pop().toLowerCase())) ?? "";
+    }
+    if (!link) return null;
+    if (/^https?:\/\//.test(link)) return link;
+    const target = this.app.metadataCache.getFirstLinkpathDest(link, file.path);
+    return target ? this.app.vault.getResourcePath(target) : null;
   }
 
   async fillNote(file, { force = false } = {}) {
@@ -556,7 +602,7 @@ function buildBase(plugin) {
   const t = (k) => plugin.t(k);
   const q = (text) => `'${String(text).replace(/'/g, "''")}'`;
   const status = (value) => q(`status == ${JSON.stringify(value)}`);
-  const cards = `    image: formula.photo
+  const cards = `    image: note.cover
     imageAspectRatio: 1
     cardSize: 300`;
   return `newItemFolder: ${JSON.stringify(plugin.folder)}
@@ -566,7 +612,6 @@ filters:
 formulas:
   value: ${q(priceFormula(plugin))}
   buy: ${q(`if(link.isEmpty(), "", link(link, ${JSON.stringify(s.linkLabel)}))`)}
-  photo: ${q('file.embeds.filter(value.toString().lower().containsAny(".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif"))[0]')}
   main_category: ${q(`if(categories.isEmpty(), ${JSON.stringify(t("noCategory"))}, list(categories)[0])`)}
 properties:
   file.name:
@@ -757,12 +802,7 @@ const SmartCategoriesView = BasesView ? class extends BasesView {
   }
 
   photoOf(file) {
-    const embeds = this.app.metadataCache.getFileCache(file)?.embeds ?? [];
-    for (const e of embeds) {
-      const target = this.app.metadataCache.getFirstLinkpathDest(e.link.split("|")[0], file.path);
-      if (target && IMAGE_EXTENSIONS.includes(target.extension.toLowerCase())) return this.app.vault.getResourcePath(target);
-    }
-    return null;
+    return this.plugin.coverOf(file);
   }
 
   render() {
@@ -813,6 +853,44 @@ const SmartCategoriesView = BasesView ? class extends BasesView {
     card.addEventListener("keydown", (e) => { if (e.key === "Enter") open(e); });
   }
 } : null;
+
+// The ```wish block: header with photo, title, summary and actions. Redraws when the note's properties change.
+class WishPage extends MarkdownRenderChild {
+  constructor(plugin, el, path) {
+    super(el);
+    this.plugin = plugin;
+    this.path = path;
+  }
+
+  onload() {
+    this.render();
+    this.registerEvent(this.plugin.app.metadataCache.on("changed", (f) => { if (f.path === this.path) this.render(); }));
+  }
+
+  render() {
+    const p = this.plugin;
+    const file = p.app.vault.getFileByPath(this.path);
+    if (!file) return;
+    const fm = p.app.metadataCache.getFileCache(file)?.frontmatter ?? {};
+    const t = (k, v) => p.t(k, v);
+    const bought = fm.status === p.settings.boughtStatus;
+    const present = (v) => v !== null && v !== undefined && v !== "";
+    const actions = [];
+    if (fm.link) actions.push({ text: t("pageBuy"), href: String(fm.link) });
+    actions.push({ text: t(bought ? "pageBackToWant" : "pageMarkBought"), cta: !bought, onClick: () => p.togglePurchased(file) });
+    this.containerEl.empty();
+    renderHeader(this.containerEl.createDiv("kit-page qw-page"), {
+      image: p.coverOf(file),
+      title: file.basename,
+      lines: [
+        [fm.brand, present(fm.price) ? formatMoney(fm.price, p.currency(fm.currency)) : "", fm.priority ? t("pagePriority", { priority: fm.priority }) : ""],
+        [present(fm.rank) ? `#${fm.rank}` : "", fm.store ? t("pageStore", { store: fm.store }) : "", [].concat(fm.categories ?? []).filter(Boolean).join(" › ")],
+        [bought && fm.purchased ? t("pageBoughtOn", { date: formatDate(String(fm.purchased), p.lang) }) : ""],
+      ],
+      actions,
+    });
+  }
+}
 
 // Three-step form built for the keyboard: Enter goes to the next step,
 // Ctrl/Cmd+Enter saves on the last one, Esc cancels.
@@ -1124,16 +1202,17 @@ async function createItem(plugin, data, image) {
   if (!vault.getAbstractFileByPath(plugin.folder)) await vault.createFolder(plugin.folder);
   const notePath = freePath(vault, `${plugin.folder}/${name}`, "md");
 
-  let embed = "";
+  let cover = null;
   if (image) {
     const imagePath = await fileManager.getAvailablePathForAttachment(`${name}.${image.ext}`, notePath);
     const imageFile = await vault.createBinary(imagePath, image.buffer);
-    embed = "!" + fileManager.generateMarkdownLink(imageFile, notePath);
+    cover = `[[${app.metadataCache.fileToLinktext(imageFile, notePath)}]]`;
   }
 
   const typedRank = Number(data.rank);
   const props = plugin.defaultProperties();
   Object.assign(props, {
+    cover,
     price: parsePrice(data.price, plugin.currency(data.currency)),
     currency: data.currency,
     rank: data.rank && Number.isFinite(typedRank) ? typedRank : props.rank,
@@ -1146,7 +1225,7 @@ async function createItem(plugin, data, image) {
 
   const reasons = data.reasons.split("\n").map((l) => l.trim().replace(/^-\s*/, "")).filter(Boolean)
     .map((l) => `- ${l}`).join("\n");
-  const file = await vault.create(notePath, plugin.sections(embed, reasons));
+  const file = await vault.create(notePath, plugin.sections(reasons));
   await fileManager.processFrontMatter(file, (fm) => Object.assign(fm, props));
   return file;
 }
@@ -1402,12 +1481,11 @@ class QuickWishlistSettingTab extends PluginSettingTab {
     let preview;
     const update = () => {
       preview.empty();
-      preview.createEl("pre", { text: p.sections("![[photo.png]]", "- ...").trim() });
+      preview.createEl("pre", { text: p.sections("- ...").trim() });
       const link = preview.createDiv({ cls: "qw-preview-link" });
       link.createSpan({ text: `${p.settings.linkLabel} ↗` });
       link.createSpan({ cls: "qw-preview-caption", text: this.t("previewInBase") });
     };
-    this.text(el, "setPhotoHeading", null, "photoHeading", { onChange: update });
     this.text(el, "setReasonsHeading", null, "reasonsHeading", { onChange: update });
     this.text(el, "setLinkLabel", "setLinkLabelDesc", "linkLabel", { onChange: update });
     preview = el.createDiv({ cls: "qw-preview" });

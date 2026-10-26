@@ -59,6 +59,200 @@ var require_i18n = __commonJS({
   }
 });
 
+// src/kit/format.js
+var require_format = __commonJS({
+  "src/kit/format.js"(exports2, module2) {
+    "use strict";
+    function formatMoney2(value, currency) {
+      if (value === null || value === void 0 || value === "") return "";
+      const n = Number(value);
+      if (!Number.isFinite(n)) return "";
+      const [int, dec] = Math.abs(n).toFixed(2).split(".");
+      const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, currency.thousands);
+      return `${n < 0 ? "-" : ""}${currency.symbol} ${grouped}${currency.decimal}${dec}`;
+    }
+    function formatDate2(iso, lang) {
+      const text = String(iso ?? "");
+      const m = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (!m) return text;
+      return lang === "pt" ? `${m[3]}/${m[2]}/${m[1]}` : `${m[2]}/${m[3]}/${m[1]}`;
+    }
+    module2.exports = { formatMoney: formatMoney2, formatDate: formatDate2 };
+  }
+});
+
+// src/kit/blocks.js
+var require_blocks = __commonJS({
+  "src/kit/blocks.js"(exports2, module2) {
+    "use strict";
+    function readItems2(src) {
+      return String(src ?? "").split("\n").map((l) => l.replace(/^\s*[-*](?:\s+|$)/, "").trim()).filter(Boolean);
+    }
+    function writeBlock2(text, type, heading, lines) {
+      const ls = text.split("\n");
+      const start = ls.findIndex((l) => l.trim() === "```" + type);
+      const end = start < 0 ? -1 : ls.findIndex((l, i) => i > start && l.trim() === "```");
+      if (end < 0) {
+        const body = lines.length ? lines.join("\n") + "\n" : "";
+        return text.replace(/\s*$/, "") + `
+
+## ${heading}
+
+\`\`\`${type}
+${body}\`\`\`
+`;
+      }
+      ls.splice(start + 1, end - start - 1, ...lines);
+      return ls.join("\n");
+    }
+    module2.exports = { readItems: readItems2, writeBlock: writeBlock2 };
+  }
+});
+
+// src/kit/page.js
+var require_page = __commonJS({
+  "src/kit/page.js"(exports2, module2) {
+    "use strict";
+    var { setIcon } = require("obsidian");
+    var cleanText = (s) => String(s ?? "").replace(/\s*\n\s*/g, " ").trim();
+    var dragging = null;
+    function renderHeader2(el, { image = null, title, lines = [], actions = [] }) {
+      const top = el.createDiv("kit-header");
+      if (image) top.createEl("img", { cls: "kit-cover", attr: { src: image, alt: title } });
+      const id = top.createDiv("kit-id");
+      id.createDiv({ cls: "kit-title", text: title });
+      for (const parts of lines) {
+        const text = parts.filter(Boolean).join(" \xB7 ");
+        if (text) id.createDiv({ cls: "kit-summary", text });
+      }
+      if (actions.length) {
+        const row = id.createDiv("kit-actions");
+        for (const a of actions) {
+          const b = a.href ? row.createEl("a", { cls: "kit-tag", text: a.text, href: a.href }) : row.createEl("button", { cls: a.cta ? "mod-cta" : "", text: a.text });
+          if (a.onClick) b.onclick = (e) => {
+            e.preventDefault();
+            a.onClick();
+          };
+        }
+      }
+      return top;
+    }
+    function iconButton(parent, icon, label, fn) {
+      const b = parent.createEl("button", { cls: "kit-action clickable-icon", attr: { "aria-label": label } });
+      setIcon(b, icon);
+      b.onclick = () => fn(b);
+      return b;
+    }
+    function removeButton(parent, t, fn) {
+      iconButton(parent, "trash-2", t("remove"), (b) => {
+        if (b.hasClass("is-confirm")) return fn();
+        b.addClass("is-confirm");
+        b.setText(t("removeConfirm"));
+        window.setTimeout(() => {
+          if (!b.isConnected) return;
+          b.removeClass("is-confirm");
+          b.empty();
+          setIcon(b, "trash-2");
+        }, 3e3);
+      });
+    }
+    function editInline(textEl, current, onSave) {
+      const input = createEl("input", { type: "text", cls: "kit-row-input" });
+      input.value = current;
+      textEl.replaceWith(input);
+      input.focus();
+      input.select();
+      let done = false;
+      const close = (ok) => {
+        if (done) return;
+        done = true;
+        const v = cleanText(input.value);
+        if (!ok || !v || v === current) return input.replaceWith(textEl);
+        onSave(v);
+      };
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.isComposing) {
+          e.preventDefault();
+          close(true);
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          close(false);
+        }
+      });
+      input.addEventListener("blur", () => close(true));
+    }
+    function renderEditableList2(parent, items, save, { t, placeholder, empty }) {
+      const box = parent.createDiv("kit-list");
+      const rows = box.createDiv("kit-rows");
+      if (!items.length) rows.createDiv({ cls: "kit-hint kit-empty", text: empty ?? t("empty") });
+      items.forEach((text, i) => {
+        const row = rows.createDiv("kit-row");
+        row.createDiv("kit-dot");
+        const body = row.createDiv("kit-row-body");
+        const textEl = body.createDiv({ cls: "kit-row-text", text });
+        const edit = () => editInline(textEl, text, (v) => {
+          const l = [...items];
+          l[i] = v;
+          save(l);
+        });
+        textEl.ondblclick = edit;
+        const actions = row.createDiv("kit-row-actions");
+        if (i > 0) iconButton(actions, "arrow-up-to-line", t("toTop"), () => {
+          const l = [...items];
+          l.unshift(l.splice(i, 1)[0]);
+          save(l);
+        });
+        iconButton(actions, "pencil", t("edit"), edit);
+        removeButton(actions, t, () => save(items.filter((_, j) => j !== i)));
+        row.draggable = true;
+        row.addEventListener("dragstart", (e) => {
+          dragging = { box, i };
+          row.addClass("is-dragging");
+          e.dataTransfer.effectAllowed = "move";
+        });
+        row.addEventListener("dragend", () => {
+          dragging = null;
+          row.removeClass("is-dragging");
+        });
+        row.addEventListener("dragover", (e) => {
+          if (dragging?.box === box && dragging.i !== i) {
+            e.preventDefault();
+            row.addClass("is-target");
+          }
+        });
+        row.addEventListener("dragleave", () => row.removeClass("is-target"));
+        row.addEventListener("drop", (e) => {
+          e.preventDefault();
+          row.removeClass("is-target");
+          if (dragging?.box !== box || dragging.i === i) return;
+          const l = [...items];
+          const [moved] = l.splice(dragging.i, 1);
+          l.splice(i, 0, moved);
+          save(l);
+        });
+      });
+      const add = box.createDiv("kit-new");
+      const input = add.createEl("input", { type: "text", attr: { placeholder: placeholder ?? t("newItem") } });
+      const submit = (top) => {
+        const v = cleanText(input.value);
+        if (!v) return input.focus();
+        save(top ? [v, ...items] : [...items, v]);
+      };
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.isComposing) {
+          e.preventDefault();
+          submit(e.shiftKey);
+        }
+      });
+      add.createEl("button", { cls: "mod-cta", text: t("add") }).onclick = () => submit(false);
+      return box;
+    }
+    module2.exports = { renderHeader: renderHeader2, renderEditableList: renderEditableList2 };
+  }
+});
+
 // src/main.js
 var {
   Plugin,
@@ -70,11 +264,15 @@ var {
   Keymap,
   AbstractInputSuggest,
   BasesView,
+  MarkdownRenderChild,
   requestUrl,
   normalizePath,
   parseYaml
 } = require("obsidian");
 var { resolveLanguage, createT } = require_i18n();
+var { formatMoney, formatDate } = require_format();
+var { readItems, writeBlock } = require_blocks();
+var { renderHeader, renderEditableList } = require_page();
 var SMART_VIEW = "qw-smart-categories";
 var STRINGS = {
   en: {
@@ -155,7 +353,6 @@ var STRINGS = {
     setExtraDesc: "Optional YAML added to every new item, e.g. type: wish",
     setHidden: "Hidden properties",
     setHiddenDesc: "Comma-separated. Kept in the note but not shown in the properties of wishlist items, e.g. type",
-    setPhotoHeading: "Photo heading",
     setReasonsHeading: "Reasons heading",
     setLinkLabel: "Link label",
     setLinkLabelDesc: "Text of the buy link in the base. Applies to bases created after the change.",
@@ -171,6 +368,14 @@ var STRINGS = {
     viewPurchased: "Purchased",
     colItem: "Item",
     colBrand: "Brand",
+    pageBuy: "Buy \u2197",
+    pageMarkBought: "Mark as purchased",
+    pageBackToWant: "Back to the list",
+    pagePriority: "{priority} priority",
+    pageStore: "{store} (store)",
+    pageBoughtOn: "purchased on {date}",
+    pageReasonPlaceholder: "New reason\u2026 (Enter adds)",
+    pageReasonsEmpty: "Why do you want it? What changes once you have it?",
     colPrice: "Price",
     colAmount: "Amount",
     colCurrency: "Currency",
@@ -262,7 +467,6 @@ var STRINGS = {
     setExtraDesc: "YAML opcional adicionado a todo item novo, por exemplo: tipo: desejo",
     setHidden: "Propriedades escondidas",
     setHiddenDesc: "Separadas por v\xEDrgula. Ficam na nota, mas n\xE3o aparecem nas propriedades dos itens da wishlist, por exemplo: tipo",
-    setPhotoHeading: "T\xEDtulo da foto",
     setReasonsHeading: "T\xEDtulo dos motivos",
     setLinkLabel: "Texto do link",
     setLinkLabelDesc: "Texto do link de compra na base. Vale para as bases criadas depois da mudan\xE7a.",
@@ -276,6 +480,15 @@ var STRINGS = {
     viewReorder: "Reordenar",
     viewPurchased: "Comprados",
     colItem: "Item",
+    colBrand: "Marca",
+    pageBuy: "Comprar \u2197",
+    pageMarkBought: "Marcar como comprado",
+    pageBackToWant: "Voltar para a lista",
+    pagePriority: "prioridade {priority}",
+    pageStore: "{store} (loja)",
+    pageBoughtOn: "comprado em {date}",
+    pageReasonPlaceholder: "Novo motivo\u2026 (Enter adiciona)",
+    pageReasonsEmpty: "Por que voc\xEA quer isso? O que muda quando tiver?",
     colPrice: "Pre\xE7o",
     colAmount: "Valor",
     colCurrency: "Moeda",
@@ -339,6 +552,20 @@ module.exports = class QuickWishlist extends Plugin {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, LOCALE_DEFAULTS[lang], saved);
     if (saved && saved.boughtStatus === void 0) this.settings.boughtStatus = LOCALE_DEFAULTS[lang].boughtStatus;
     this.addSettingTab(new QuickWishlistSettingTab(this.app, this));
+    this.registerMarkdownCodeBlockProcessor("wish", (_src, el, ctx) => ctx.addChild(new WishPage(this, el, ctx.sourcePath)));
+    this.registerMarkdownCodeBlockProcessor("reasons", (src, el, ctx) => {
+      const file = this.app.vault.getFileByPath(ctx.sourcePath);
+      if (!file) return;
+      const save = (items) => this.app.vault.process(
+        file,
+        (text) => writeBlock(text, "reasons", this.settings.reasonsHeading, items.map((x) => `- ${x}`))
+      );
+      renderEditableList(el.createDiv("kit-section"), readItems(src), save, {
+        t: (k, v) => this.t(k, v),
+        placeholder: this.t("pageReasonPlaceholder"),
+        empty: this.t("pageReasonsEmpty")
+      });
+    });
     this.addCommand({
       id: "new-item",
       name: this.t("cmdNewItem"),
@@ -521,16 +748,28 @@ module.exports = class QuickWishlist extends Plugin {
       tags: [s.tag]
     };
   }
-  sections(embed = "", reasons = "") {
-    const s = this.settings;
-    return `## ${s.photoHeading}
+  // Body of a new note. The photo lives in the "cover" property.
+  sections(reasons = "") {
+    return `\`\`\`wish
+\`\`\`
 
-${embed ? `${embed}
-` : ""}
-## ${s.reasonsHeading}
+## ${this.settings.reasonsHeading}
 
-${reasons || "- "}
+\`\`\`reasons
+${reasons ? reasons + "\n" : ""}\`\`\`
 `;
+  }
+  // Image of an item: the "cover" property, or the first image embedded in the note (old notes).
+  coverOf(file) {
+    const cache = this.app.metadataCache.getFileCache(file);
+    let link = String(cache?.frontmatter?.cover ?? "").trim().replace(/^!?\[\[|\]\]$/g, "").split("|")[0];
+    if (!link) {
+      link = (cache?.embeds ?? []).map((e) => e.link.split("|")[0]).find((l) => IMAGE_EXTENSIONS.includes(l.split(".").pop().toLowerCase())) ?? "";
+    }
+    if (!link) return null;
+    if (/^https?:\/\//.test(link)) return link;
+    const target = this.app.metadataCache.getFirstLinkpathDest(link, file.path);
+    return target ? this.app.vault.getResourcePath(target) : null;
   }
   async fillNote(file, { force = false } = {}) {
     if (!this.app.vault.getFileByPath(file.path)) return;
@@ -587,7 +826,7 @@ function buildBase(plugin) {
   const t = (k) => plugin.t(k);
   const q = (text) => `'${String(text).replace(/'/g, "''")}'`;
   const status = (value) => q(`status == ${JSON.stringify(value)}`);
-  const cards = `    image: formula.photo
+  const cards = `    image: note.cover
     imageAspectRatio: 1
     cardSize: 300`;
   return `newItemFolder: ${JSON.stringify(plugin.folder)}
@@ -597,7 +836,6 @@ filters:
 formulas:
   value: ${q(priceFormula(plugin))}
   buy: ${q(`if(link.isEmpty(), "", link(link, ${JSON.stringify(s.linkLabel)}))`)}
-  photo: ${q('file.embeds.filter(value.toString().lower().containsAny(".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif"))[0]')}
   main_category: ${q(`if(categories.isEmpty(), ${JSON.stringify(t("noCategory"))}, list(categories)[0])`)}
 properties:
   file.name:
@@ -768,12 +1006,7 @@ var SmartCategoriesView = BasesView ? class extends BasesView {
     return [...new Set([].concat(raw ?? []).map((c) => String(c ?? "").trim()).filter(Boolean))];
   }
   photoOf(file) {
-    const embeds = this.app.metadataCache.getFileCache(file)?.embeds ?? [];
-    for (const e of embeds) {
-      const target = this.app.metadataCache.getFirstLinkpathDest(e.link.split("|")[0], file.path);
-      if (target && IMAGE_EXTENSIONS.includes(target.extension.toLowerCase())) return this.app.vault.getResourcePath(target);
-    }
-    return null;
+    return this.plugin.coverOf(file);
   }
   render() {
     const root = this.rootEl;
@@ -824,6 +1057,42 @@ var SmartCategoriesView = BasesView ? class extends BasesView {
     });
   }
 } : null;
+var WishPage = class extends MarkdownRenderChild {
+  constructor(plugin, el, path) {
+    super(el);
+    this.plugin = plugin;
+    this.path = path;
+  }
+  onload() {
+    this.render();
+    this.registerEvent(this.plugin.app.metadataCache.on("changed", (f) => {
+      if (f.path === this.path) this.render();
+    }));
+  }
+  render() {
+    const p = this.plugin;
+    const file = p.app.vault.getFileByPath(this.path);
+    if (!file) return;
+    const fm = p.app.metadataCache.getFileCache(file)?.frontmatter ?? {};
+    const t = (k, v) => p.t(k, v);
+    const bought = fm.status === p.settings.boughtStatus;
+    const present = (v) => v !== null && v !== void 0 && v !== "";
+    const actions = [];
+    if (fm.link) actions.push({ text: t("pageBuy"), href: String(fm.link) });
+    actions.push({ text: t(bought ? "pageBackToWant" : "pageMarkBought"), cta: !bought, onClick: () => p.togglePurchased(file) });
+    this.containerEl.empty();
+    renderHeader(this.containerEl.createDiv("kit-page qw-page"), {
+      image: p.coverOf(file),
+      title: file.basename,
+      lines: [
+        [fm.brand, present(fm.price) ? formatMoney(fm.price, p.currency(fm.currency)) : "", fm.priority ? t("pagePriority", { priority: fm.priority }) : ""],
+        [present(fm.rank) ? `#${fm.rank}` : "", fm.store ? t("pageStore", { store: fm.store }) : "", [].concat(fm.categories ?? []).filter(Boolean).join(" \u203A ")],
+        [bought && fm.purchased ? t("pageBoughtOn", { date: formatDate(String(fm.purchased), p.lang) }) : ""]
+      ],
+      actions
+    });
+  }
+};
 var WishlistModal = class extends Modal {
   constructor(app, plugin) {
     super(app);
@@ -1127,15 +1396,16 @@ async function createItem(plugin, data, image) {
   const name = data.product.trim().replace(/[\\/:*?"<>|#^[\]]/g, "-");
   if (!vault.getAbstractFileByPath(plugin.folder)) await vault.createFolder(plugin.folder);
   const notePath = freePath(vault, `${plugin.folder}/${name}`, "md");
-  let embed = "";
+  let cover = null;
   if (image) {
     const imagePath = await fileManager.getAvailablePathForAttachment(`${name}.${image.ext}`, notePath);
     const imageFile = await vault.createBinary(imagePath, image.buffer);
-    embed = "!" + fileManager.generateMarkdownLink(imageFile, notePath);
+    cover = `[[${app.metadataCache.fileToLinktext(imageFile, notePath)}]]`;
   }
   const typedRank = Number(data.rank);
   const props = plugin.defaultProperties();
   Object.assign(props, {
+    cover,
     price: parsePrice(data.price, plugin.currency(data.currency)),
     currency: data.currency,
     rank: data.rank && Number.isFinite(typedRank) ? typedRank : props.rank,
@@ -1146,7 +1416,7 @@ async function createItem(plugin, data, image) {
     store: data.store.trim() || null
   });
   const reasons = data.reasons.split("\n").map((l) => l.trim().replace(/^-\s*/, "")).filter(Boolean).map((l) => `- ${l}`).join("\n");
-  const file = await vault.create(notePath, plugin.sections(embed, reasons));
+  const file = await vault.create(notePath, plugin.sections(reasons));
   await fileManager.processFrontMatter(file, (fm) => Object.assign(fm, props));
   return file;
 }
@@ -1374,12 +1644,11 @@ var QuickWishlistSettingTab = class extends PluginSettingTab {
     let preview;
     const update = () => {
       preview.empty();
-      preview.createEl("pre", { text: p.sections("![[photo.png]]", "- ...").trim() });
+      preview.createEl("pre", { text: p.sections("- ...").trim() });
       const link = preview.createDiv({ cls: "qw-preview-link" });
       link.createSpan({ text: `${p.settings.linkLabel} \u2197` });
       link.createSpan({ cls: "qw-preview-caption", text: this.t("previewInBase") });
     };
-    this.text(el, "setPhotoHeading", null, "photoHeading", { onChange: update });
     this.text(el, "setReasonsHeading", null, "reasonsHeading", { onChange: update });
     this.text(el, "setLinkLabel", "setLinkLabelDesc", "linkLabel", { onChange: update });
     preview = el.createDiv({ cls: "qw-preview" });
