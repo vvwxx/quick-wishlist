@@ -8,6 +8,7 @@ const { resolveLanguage, createT } = require("./kit/i18n");
 const { formatMoney, formatDate } = require("./kit/format");
 const { readItems, writeBlock } = require("./kit/blocks");
 const { renderHeader, renderEditableList } = require("./kit/page");
+const { upgradeNote, upgradeBase } = require("./upgrade");
 
 const SMART_VIEW = "qw-smart-categories";
 
@@ -18,6 +19,7 @@ const STRINGS = {
     cmdCreateBase: "Create wishlist base",
     cmdFillNote: "Fill current note with wishlist properties",
     cmdTogglePurchased: "Mark as purchased / back to want",
+    cmdUpgrade: "Upgrade old notes to the item page",
     formTitle: "New wishlist item",
     stepDetails: "Details",
     stepPhoto: "Photo",
@@ -127,12 +129,22 @@ const STRINGS = {
     viewSmart: "Smart categories",
     others: "Others",
     emptyView: "No items yet.",
+    upgradeTitle: "Upgrade old notes",
+    upgradeBody: "{count} notes in {folder} will get the item page: the photo moves to the cover property and the reasons go into a list. The rest of each note stays as it is.",
+    upgradeBodyBases: "{count} notes and {bases} bases in {folder} will get the item page: in the notes, the photo moves to the cover property and the reasons go into a list. The bases show the cover property instead of the photo formula. The rest stays as it is.",
+    upgradeRun: "Upgrade",
+    upgradeCancel: "Cancel",
+    upgradeNone: "Every note already uses the item page.",
+    upgradeDone: "{count} notes upgraded.",
+    upgradeDoneBases: "{count} notes and {bases} bases upgraded.",
+    upgradeSkipped: "Skipped, could not read: {names}",
   },
   pt: {
     cmdNewItem: "Novo item da wishlist",
     cmdCreateBase: "Criar base da wishlist",
     cmdFillNote: "Completar a nota atual com as propriedades da wishlist",
     cmdTogglePurchased: "Marcar como comprado / voltar para quero",
+    cmdUpgrade: "Atualizar notas antigas para a página do item",
     formTitle: "Novo item da wishlist",
     stepDetails: "Detalhes",
     stepPhoto: "Foto",
@@ -240,6 +252,15 @@ const STRINGS = {
     viewSmart: "Categorias inteligentes",
     others: "Outros",
     emptyView: "Nenhum item ainda.",
+    upgradeTitle: "Atualizar notas antigas",
+    upgradeBody: "{count} notas em {folder} vão ganhar a página do item: a foto vai para a propriedade cover e os motivos viram uma lista. O resto de cada nota fica como está.",
+    upgradeBodyBases: "{count} notas e {bases} bases em {folder} vão ganhar a página do item: nas notas, a foto vai para a propriedade cover e os motivos viram uma lista. As bases passam a mostrar a propriedade cover no lugar da fórmula da foto. O resto fica como está.",
+    upgradeRun: "Atualizar",
+    upgradeCancel: "Cancelar",
+    upgradeNone: "Todas as notas já usam a página do item.",
+    upgradeDone: "{count} notas atualizadas.",
+    upgradeDoneBases: "{count} notas e {bases} bases atualizadas.",
+    upgradeSkipped: "Puladas, não deu para ler: {names}",
   },
 };
 
@@ -301,7 +322,7 @@ module.exports = class QuickWishlist extends Plugin {
       const file = this.app.vault.getFileByPath(ctx.sourcePath);
       if (!file) return;
       const save = (items) => this.app.vault.process(file,
-        (text) => writeBlock(text, "reasons", this.settings.reasonsHeading, items.map((x) => `- ${x}`)));
+        (text) => writeBlock(text, "reasons", this.settings.reasonsHeading, items.map((x) => `- ${x}`))).catch(console.error);
       renderEditableList(el.createDiv("kit-section"), readItems(src), save, {
         t: (k, v) => this.t(k, v),
         placeholder: this.t("pageReasonPlaceholder"),
@@ -335,6 +356,11 @@ module.exports = class QuickWishlist extends Plugin {
         if (!checking) this.togglePurchased(file).catch(console.error);
         return true;
       },
+    });
+    this.addCommand({
+      id: "upgrade-notes",
+      name: this.t("cmdUpgrade"),
+      callback: () => this.upgradeNotes().catch(console.error),
     });
 
     // "Smart categories" view type for bases (Obsidian 1.10+).
@@ -569,6 +595,63 @@ module.exports = class QuickWishlist extends Plugin {
       else delete fm.purchased;
     });
     new Notice(this.t(purchased ? "purchased" : "backToWant", { name: file.basename }));
+  }
+
+  // Headings of old notes in both languages, plus whatever the user set.
+  upgradeOptions() {
+    const s = this.settings;
+    return {
+      photoHeadings: [LOCALE_DEFAULTS.en.photoHeading, LOCALE_DEFAULTS.pt.photoHeading, s.photoHeading].filter(Boolean),
+      reasonsHeadings: [LOCALE_DEFAULTS.en.reasonsHeading, LOCALE_DEFAULTS.pt.reasonsHeading, s.reasonsHeading].filter(Boolean),
+      reasonsHeading: s.reasonsHeading,
+    };
+  }
+
+  // Old notes get the page format; the wishlist bases stop reading the photo from a formula.
+  // Each file is rewritten in a single write, so a failure never leaves one half done.
+  async upgradeNotes() {
+    const opts = this.upgradeOptions();
+    const notes = [];
+    for (const f of this.app.vault.getMarkdownFiles()) {
+      if (!this.isWishlistNote(f)) continue;
+      if (upgradeNote(await this.app.vault.cachedRead(f), opts) !== null) notes.push(f);
+    }
+    const bases = [];
+    for (const path of this.wishlistBases ?? []) {
+      const f = this.app.vault.getFileByPath(path);
+      if (f && upgradeBase(await this.app.vault.cachedRead(f)) !== null) bases.push(f);
+    }
+    if (!notes.length && !bases.length) {
+      new Notice(this.t("upgradeNone"));
+      return;
+    }
+    const vars = { count: notes.length, bases: bases.length, folder: this.folder };
+    new ConfirmModal(this.app, {
+      title: this.t("upgradeTitle"),
+      body: this.t(bases.length ? "upgradeBodyBases" : "upgradeBody", vars),
+      confirm: this.t("upgradeRun"),
+      cancel: this.t("upgradeCancel"),
+      onConfirm: async () => {
+        const skipped = [];
+        let doneNotes = 0;
+        let doneBases = 0;
+        for (const f of [...notes, ...bases]) {
+          const isBase = f.extension === "base";
+          try {
+            await this.app.vault.process(f, (text) => (isBase ? upgradeBase(text) : upgradeNote(text, opts)) ?? text);
+            if (isBase) doneBases++;
+            else doneNotes++;
+          } catch (err) {
+            console.error(err);
+            skipped.push(isBase ? f.name : f.basename);
+          }
+        }
+        const msg = bases.length
+          ? this.t("upgradeDoneBases", { count: doneNotes, bases: doneBases })
+          : this.t("upgradeDone", { count: doneNotes });
+        new Notice(skipped.length ? `${msg}\n${this.t("upgradeSkipped", { names: skipped.join(", ") })}` : msg, 8000);
+      },
+    }).open();
   }
 
   async createBase() {
@@ -862,22 +945,25 @@ class WishPage extends MarkdownRenderChild {
     this.path = path;
   }
 
+  // The file is kept as an object, so the page still follows its note after a rename.
   onload() {
+    this.file = this.plugin.app.vault.getFileByPath(this.path);
+    if (!this.file) return;
     this.render();
-    this.registerEvent(this.plugin.app.metadataCache.on("changed", (f) => { if (f.path === this.path) this.render(); }));
+    this.registerEvent(this.plugin.app.metadataCache.on("changed", (f) => { if (f === this.file) this.render(); }));
   }
 
   render() {
     const p = this.plugin;
-    const file = p.app.vault.getFileByPath(this.path);
-    if (!file) return;
+    const file = this.file;
     const fm = p.app.metadataCache.getFileCache(file)?.frontmatter ?? {};
     const t = (k, v) => p.t(k, v);
     const bought = fm.status === p.settings.boughtStatus;
     const present = (v) => v !== null && v !== undefined && v !== "";
     const actions = [];
-    if (fm.link) actions.push({ text: t("pageBuy"), href: String(fm.link) });
-    actions.push({ text: t(bought ? "pageBackToWant" : "pageMarkBought"), cta: !bought, onClick: () => p.togglePurchased(file) });
+    const link = String(fm.link ?? "").trim();
+    if (link) actions.push({ text: t("pageBuy"), href: /^https?:\/\//i.test(link) ? link : `https://${link}` });
+    actions.push({ text: t(bought ? "pageBackToWant" : "pageMarkBought"), cta: !bought, onClick: () => p.togglePurchased(file).catch(console.error) });
     this.containerEl.empty();
     renderHeader(this.containerEl.createDiv("kit-page qw-page"), {
       image: p.coverOf(file),
@@ -889,6 +975,26 @@ class WishPage extends MarkdownRenderChild {
       ],
       actions,
     });
+  }
+}
+
+class ConfirmModal extends Modal {
+  constructor(app, opts) {
+    super(app);
+    this.opts = opts;
+  }
+
+  onOpen() {
+    const { contentEl, opts } = this;
+    this.setTitle(opts.title);
+    contentEl.createEl("p", { text: opts.body });
+    new Setting(contentEl)
+      .addButton((b) => b.setButtonText(opts.cancel).onClick(() => this.close()))
+      .addButton((b) => b.setButtonText(opts.confirm).setCta().onClick(() => { this.close(); opts.onConfirm().catch(console.error); }));
+  }
+
+  onClose() {
+    this.contentEl.empty();
   }
 }
 

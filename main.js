@@ -253,6 +253,153 @@ var require_page = __commonJS({
   }
 });
 
+// src/upgrade.js
+var require_upgrade = __commonJS({
+  "src/upgrade.js"(exports2, module2) {
+    "use strict";
+    var { readItems: readItems2 } = require_blocks();
+    var IMAGE = /\.(png|jpe?g|webp|gif|avif|svg|bmp)$/i;
+    function decodePath(p) {
+      try {
+        return decodeURI(p);
+      } catch {
+        return p;
+      }
+    }
+    function imageEmbed(line) {
+      const t = line.trim();
+      let m = t.match(/^!\[\[([^\]|]+)(\|[^\]]*)?\]\]$/);
+      if (m && IMAGE.test(m[1])) return `[[${m[1]}]]`;
+      m = t.match(/^!\[[^\]]*\]\(<?([^)>]+)>?\)$/);
+      if (!m) return null;
+      if (/^https?:\/\//.test(m[1])) return m[1];
+      return IMAGE.test(m[1]) ? `[[${decodePath(m[1])}]]` : null;
+    }
+    function convert(text, { photoHeadings, reasonsHeadings, reasonsHeading }) {
+      if (/^```wish\s*$/m.test(text)) return null;
+      const fmMatch = text.match(/^---\n(?:([\s\S]*?)\n)?---[ \t]*(?:\n|$)/);
+      let fm = fmMatch ? fmMatch[1] ?? "" : null;
+      const body = fmMatch ? text.slice(fmMatch[0].length) : text;
+      const fmLines = fm === null ? [] : fm.split("\n");
+      const isEmptyCover = (l, i) => /^cover:[ \t]*(?:""|'')?[ \t]*$/.test(l) && !/^(?:[ \t]|-[ \t])/.test(fmLines[i + 1] ?? "");
+      const hasCover = fmLines.some((l, i) => /^cover:/.test(l) && !isEmptyCover(l, i));
+      const emptyCoverAt = hasCover ? -1 : fmLines.findIndex(isEmptyCover);
+      const sections = [{ heading: null, lines: [] }];
+      for (const line of body.split("\n")) {
+        const h = line.match(/^##\s+(.+?)\s*$/);
+        if (h) sections.push({ heading: h[1], lines: [] });
+        else sections[sections.length - 1].lines.push(line);
+      }
+      const norm = (s) => s.trim().toLowerCase();
+      const is = (s, list2) => s.heading !== null && list2.map(norm).includes(norm(s.heading));
+      let cover = null;
+      let heading = reasonsHeading;
+      const reasons = [];
+      const rest = [];
+      for (const s of sections) {
+        if (is(s, reasonsHeadings)) {
+          heading = s.heading;
+          reasons.push(...readItems2(s.lines.join("\n")));
+          continue;
+        }
+        const mayCover = s.heading === null || is(s, photoHeadings);
+        const kept = [];
+        for (const l of s.lines) {
+          const embed = !hasCover && !cover && mayCover ? imageEmbed(l) : null;
+          if (embed) cover = embed;
+          else kept.push(l);
+        }
+        const content = kept.join("\n").trim();
+        if (!content && (s.heading === null || is(s, photoHeadings))) continue;
+        rest.push(s.heading === null ? content : content ? `## ${s.heading}
+
+${content}` : `## ${s.heading}`);
+      }
+      if (cover) {
+        const line = `cover: ${JSON.stringify(cover)}`;
+        if (emptyCoverAt >= 0) {
+          fmLines[emptyCoverAt] = line;
+          fm = fmLines.join("\n");
+        } else {
+          fm = (fm ? fm + "\n" : "") + line;
+        }
+      }
+      const list = reasons.map((r) => `- ${r}
+`).join("");
+      const parts = ["```wish\n```", `## ${heading}
+
+\`\`\`reasons
+${list}\`\`\``, ...rest];
+      const head = fm === null ? "" : fm === "" ? "---\n---\n" : `---
+${fm}
+---
+`;
+      return head + parts.join("\n\n") + "\n";
+    }
+    function upgradeNote2(text, opts) {
+      const crlf = text.includes("\r\n");
+      const out = convert(crlf ? text.replace(/\r\n/g, "\n") : text, opts);
+      return out !== null && crlf ? out.replace(/\n/g, "\r\n") : out;
+    }
+    function convertBase(text) {
+      const lines = text.split("\n");
+      const head = lines.findIndex((l) => /^formulas:[ \t]*(?:#.*)?$/.test(l));
+      if (head < 0) return null;
+      let end = head + 1;
+      while (end < lines.length && (lines[end].trim() === "" || /^[ \t]/.test(lines[end]))) end++;
+      const entries = [];
+      let indent = null;
+      for (let i = head + 1; i < end; i++) {
+        const m = lines[i].match(/^([ \t]+)([\w-]+):(?:[ \t]|$)/);
+        if (m && (indent === null || m[1] === indent)) {
+          indent = m[1];
+          entries.push({ name: m[2], from: i, to: i + 1 });
+        } else if (entries.length) {
+          entries[entries.length - 1].to = i + 1;
+        }
+      }
+      for (const e of entries) {
+        while (e.to > e.from + 1 && lines[e.to - 1].trim() === "") e.to--;
+      }
+      const readsEmbeds = new Set(
+        entries.filter((e) => lines.slice(e.from, e.to).join("\n").includes("file.embeds")).map((e) => e.name)
+      );
+      const replaced = /* @__PURE__ */ new Set();
+      const out = lines.map((line, i) => {
+        if (i >= head && i < end) return line;
+        const m = line.match(/^([ \t]*)image:[ \t]*["']?formula\.([\w-]+)["']?[ \t]*(?:#.*)?$/);
+        if (!m || !readsEmbeds.has(m[2])) return line;
+        replaced.add(m[2]);
+        return `${m[1]}image: note.cover`;
+      });
+      if (!replaced.size) return null;
+      const drop = /* @__PURE__ */ new Set();
+      for (const e of entries) {
+        if (!replaced.has(e.name)) continue;
+        const others = out.filter((_, i) => i < e.from || i >= e.to).join("\n");
+        if (!new RegExp(`formula\\.${e.name}(?![\\w-])`).test(others)) {
+          for (let i = e.from; i < e.to; i++) drop.add(i);
+        }
+      }
+      if (entries.length && entries.every((e) => drop.has(e.from))) {
+        for (let i = head; i < end; i++) drop.add(i);
+      }
+      return out.filter((_, i) => !drop.has(i)).join("\n");
+    }
+    function upgradeBase2(text) {
+      try {
+        if (typeof text !== "string") return null;
+        const crlf = text.includes("\r\n");
+        const out = convertBase(crlf ? text.replace(/\r\n/g, "\n") : text);
+        return out !== null && crlf ? out.replace(/\n/g, "\r\n") : out;
+      } catch {
+        return null;
+      }
+    }
+    module2.exports = { upgradeNote: upgradeNote2, upgradeBase: upgradeBase2 };
+  }
+});
+
 // src/main.js
 var {
   Plugin,
@@ -273,6 +420,7 @@ var { resolveLanguage, createT } = require_i18n();
 var { formatMoney, formatDate } = require_format();
 var { readItems, writeBlock } = require_blocks();
 var { renderHeader, renderEditableList } = require_page();
+var { upgradeNote, upgradeBase } = require_upgrade();
 var SMART_VIEW = "qw-smart-categories";
 var STRINGS = {
   en: {
@@ -280,6 +428,7 @@ var STRINGS = {
     cmdCreateBase: "Create wishlist base",
     cmdFillNote: "Fill current note with wishlist properties",
     cmdTogglePurchased: "Mark as purchased / back to want",
+    cmdUpgrade: "Upgrade old notes to the item page",
     formTitle: "New wishlist item",
     stepDetails: "Details",
     stepPhoto: "Photo",
@@ -388,13 +537,23 @@ var STRINGS = {
     noCategory: "(no category)",
     viewSmart: "Smart categories",
     others: "Others",
-    emptyView: "No items yet."
+    emptyView: "No items yet.",
+    upgradeTitle: "Upgrade old notes",
+    upgradeBody: "{count} notes in {folder} will get the item page: the photo moves to the cover property and the reasons go into a list. The rest of each note stays as it is.",
+    upgradeBodyBases: "{count} notes and {bases} bases in {folder} will get the item page: in the notes, the photo moves to the cover property and the reasons go into a list. The bases show the cover property instead of the photo formula. The rest stays as it is.",
+    upgradeRun: "Upgrade",
+    upgradeCancel: "Cancel",
+    upgradeNone: "Every note already uses the item page.",
+    upgradeDone: "{count} notes upgraded.",
+    upgradeDoneBases: "{count} notes and {bases} bases upgraded.",
+    upgradeSkipped: "Skipped, could not read: {names}"
   },
   pt: {
     cmdNewItem: "Novo item da wishlist",
     cmdCreateBase: "Criar base da wishlist",
     cmdFillNote: "Completar a nota atual com as propriedades da wishlist",
     cmdTogglePurchased: "Marcar como comprado / voltar para quero",
+    cmdUpgrade: "Atualizar notas antigas para a p\xE1gina do item",
     formTitle: "Novo item da wishlist",
     stepDetails: "Detalhes",
     stepPhoto: "Foto",
@@ -501,7 +660,16 @@ var STRINGS = {
     noCategory: "(sem categoria)",
     viewSmart: "Categorias inteligentes",
     others: "Outros",
-    emptyView: "Nenhum item ainda."
+    emptyView: "Nenhum item ainda.",
+    upgradeTitle: "Atualizar notas antigas",
+    upgradeBody: "{count} notas em {folder} v\xE3o ganhar a p\xE1gina do item: a foto vai para a propriedade cover e os motivos viram uma lista. O resto de cada nota fica como est\xE1.",
+    upgradeBodyBases: "{count} notas e {bases} bases em {folder} v\xE3o ganhar a p\xE1gina do item: nas notas, a foto vai para a propriedade cover e os motivos viram uma lista. As bases passam a mostrar a propriedade cover no lugar da f\xF3rmula da foto. O resto fica como est\xE1.",
+    upgradeRun: "Atualizar",
+    upgradeCancel: "Cancelar",
+    upgradeNone: "Todas as notas j\xE1 usam a p\xE1gina do item.",
+    upgradeDone: "{count} notas atualizadas.",
+    upgradeDoneBases: "{count} notas e {bases} bases atualizadas.",
+    upgradeSkipped: "Puladas, n\xE3o deu para ler: {names}"
   }
 };
 var LOCALE_DEFAULTS = {
@@ -559,7 +727,7 @@ module.exports = class QuickWishlist extends Plugin {
       const save = (items) => this.app.vault.process(
         file,
         (text) => writeBlock(text, "reasons", this.settings.reasonsHeading, items.map((x) => `- ${x}`))
-      );
+      ).catch(console.error);
       renderEditableList(el.createDiv("kit-section"), readItems(src), save, {
         t: (k, v) => this.t(k, v),
         placeholder: this.t("pageReasonPlaceholder"),
@@ -592,6 +760,11 @@ module.exports = class QuickWishlist extends Plugin {
         if (!checking) this.togglePurchased(file).catch(console.error);
         return true;
       }
+    });
+    this.addCommand({
+      id: "upgrade-notes",
+      name: this.t("cmdUpgrade"),
+      callback: () => this.upgradeNotes().catch(console.error)
     });
     if (BasesView && typeof this.registerBasesView === "function") {
       this.registerBasesView(SMART_VIEW, {
@@ -797,6 +970,60 @@ ${reasons ? reasons + "\n" : ""}\`\`\`
       else delete fm.purchased;
     });
     new Notice(this.t(purchased ? "purchased" : "backToWant", { name: file.basename }));
+  }
+  // Headings of old notes in both languages, plus whatever the user set.
+  upgradeOptions() {
+    const s = this.settings;
+    return {
+      photoHeadings: [LOCALE_DEFAULTS.en.photoHeading, LOCALE_DEFAULTS.pt.photoHeading, s.photoHeading].filter(Boolean),
+      reasonsHeadings: [LOCALE_DEFAULTS.en.reasonsHeading, LOCALE_DEFAULTS.pt.reasonsHeading, s.reasonsHeading].filter(Boolean),
+      reasonsHeading: s.reasonsHeading
+    };
+  }
+  // Old notes get the page format; the wishlist bases stop reading the photo from a formula.
+  // Each file is rewritten in a single write, so a failure never leaves one half done.
+  async upgradeNotes() {
+    const opts = this.upgradeOptions();
+    const notes = [];
+    for (const f of this.app.vault.getMarkdownFiles()) {
+      if (!this.isWishlistNote(f)) continue;
+      if (upgradeNote(await this.app.vault.cachedRead(f), opts) !== null) notes.push(f);
+    }
+    const bases = [];
+    for (const path of this.wishlistBases ?? []) {
+      const f = this.app.vault.getFileByPath(path);
+      if (f && upgradeBase(await this.app.vault.cachedRead(f)) !== null) bases.push(f);
+    }
+    if (!notes.length && !bases.length) {
+      new Notice(this.t("upgradeNone"));
+      return;
+    }
+    const vars = { count: notes.length, bases: bases.length, folder: this.folder };
+    new ConfirmModal(this.app, {
+      title: this.t("upgradeTitle"),
+      body: this.t(bases.length ? "upgradeBodyBases" : "upgradeBody", vars),
+      confirm: this.t("upgradeRun"),
+      cancel: this.t("upgradeCancel"),
+      onConfirm: async () => {
+        const skipped = [];
+        let doneNotes = 0;
+        let doneBases = 0;
+        for (const f of [...notes, ...bases]) {
+          const isBase = f.extension === "base";
+          try {
+            await this.app.vault.process(f, (text) => (isBase ? upgradeBase(text) : upgradeNote(text, opts)) ?? text);
+            if (isBase) doneBases++;
+            else doneNotes++;
+          } catch (err) {
+            console.error(err);
+            skipped.push(isBase ? f.name : f.basename);
+          }
+        }
+        const msg = bases.length ? this.t("upgradeDoneBases", { count: doneNotes, bases: doneBases }) : this.t("upgradeDone", { count: doneNotes });
+        new Notice(skipped.length ? `${msg}
+${this.t("upgradeSkipped", { names: skipped.join(", ") })}` : msg, 8e3);
+      }
+    }).open();
   }
   async createBase() {
     const path = normalizePath(`${this.folder}/Wishlist.base`);
@@ -1063,23 +1290,26 @@ var WishPage = class extends MarkdownRenderChild {
     this.plugin = plugin;
     this.path = path;
   }
+  // The file is kept as an object, so the page still follows its note after a rename.
   onload() {
+    this.file = this.plugin.app.vault.getFileByPath(this.path);
+    if (!this.file) return;
     this.render();
     this.registerEvent(this.plugin.app.metadataCache.on("changed", (f) => {
-      if (f.path === this.path) this.render();
+      if (f === this.file) this.render();
     }));
   }
   render() {
     const p = this.plugin;
-    const file = p.app.vault.getFileByPath(this.path);
-    if (!file) return;
+    const file = this.file;
     const fm = p.app.metadataCache.getFileCache(file)?.frontmatter ?? {};
     const t = (k, v) => p.t(k, v);
     const bought = fm.status === p.settings.boughtStatus;
     const present = (v) => v !== null && v !== void 0 && v !== "";
     const actions = [];
-    if (fm.link) actions.push({ text: t("pageBuy"), href: String(fm.link) });
-    actions.push({ text: t(bought ? "pageBackToWant" : "pageMarkBought"), cta: !bought, onClick: () => p.togglePurchased(file) });
+    const link = String(fm.link ?? "").trim();
+    if (link) actions.push({ text: t("pageBuy"), href: /^https?:\/\//i.test(link) ? link : `https://${link}` });
+    actions.push({ text: t(bought ? "pageBackToWant" : "pageMarkBought"), cta: !bought, onClick: () => p.togglePurchased(file).catch(console.error) });
     this.containerEl.empty();
     renderHeader(this.containerEl.createDiv("kit-page qw-page"), {
       image: p.coverOf(file),
@@ -1091,6 +1321,24 @@ var WishPage = class extends MarkdownRenderChild {
       ],
       actions
     });
+  }
+};
+var ConfirmModal = class extends Modal {
+  constructor(app, opts) {
+    super(app);
+    this.opts = opts;
+  }
+  onOpen() {
+    const { contentEl, opts } = this;
+    this.setTitle(opts.title);
+    contentEl.createEl("p", { text: opts.body });
+    new Setting(contentEl).addButton((b) => b.setButtonText(opts.cancel).onClick(() => this.close())).addButton((b) => b.setButtonText(opts.confirm).setCta().onClick(() => {
+      this.close();
+      opts.onConfirm().catch(console.error);
+    }));
+  }
+  onClose() {
+    this.contentEl.empty();
   }
 };
 var WishlistModal = class extends Modal {
