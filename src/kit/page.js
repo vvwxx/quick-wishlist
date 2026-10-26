@@ -8,8 +8,9 @@ const cleanText = (s) => String(s ?? "").replace(/\s*\n\s*/g, " ").trim();
 let dragging = null;
 
 // Top of a note page: image, title, summary lines and action buttons.
-function renderHeader(el, { image = null, title, lines = [], actions = [] }) {
-  const top = el.createDiv("kit-header");
+// size "small" (default) is the 96px logo used by Projects. "large" puts a 240px photo beside the title.
+function renderHeader(el, { image = null, title, lines = [], actions = [], size = "small" }) {
+  const top = el.createDiv(size === "large" ? "kit-header is-large" : "kit-header");
   if (image) top.createEl("img", { cls: "kit-cover", attr: { src: image, alt: title } });
   const id = top.createDiv("kit-id");
   id.createDiv({ cls: "kit-title", text: title });

@@ -116,8 +116,8 @@ var require_page = __commonJS({
     var { setIcon } = require("obsidian");
     var cleanText = (s) => String(s ?? "").replace(/\s*\n\s*/g, " ").trim();
     var dragging = null;
-    function renderHeader2(el, { image = null, title, lines = [], actions = [] }) {
-      const top = el.createDiv("kit-header");
+    function renderHeader2(el, { image = null, title, lines = [], actions = [], size = "small" }) {
+      const top = el.createDiv(size === "large" ? "kit-header is-large" : "kit-header");
       if (image) top.createEl("img", { cls: "kit-cover", attr: { src: image, alt: title } });
       const id = top.createDiv("kit-id");
       id.createDiv({ cls: "kit-title", text: title });
@@ -1389,7 +1389,8 @@ var WishPage = class extends MarkdownRenderChild {
         [present(fm.rank) ? `#${fm.rank}` : "", fm.store ? t("pageStore", { store: fm.store }) : "", [].concat(fm.categories ?? []).filter(Boolean).join(" \u203A ")],
         [bought && fm.purchased ? t("pageBoughtOn", { date: formatDate(String(fm.purchased), p.lang) }) : ""]
       ],
-      actions
+      actions,
+      size: "large"
     });
   }
 };

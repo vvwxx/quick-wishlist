@@ -1004,6 +1004,7 @@ class WishPage extends MarkdownRenderChild {
         [bought && fm.purchased ? t("pageBoughtOn", { date: formatDate(String(fm.purchased), p.lang) }) : ""],
       ],
       actions,
+      size: "large",
     });
   }
 }

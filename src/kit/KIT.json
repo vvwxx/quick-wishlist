@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "files": [
     "i18n.js",
     "format.js",
@@ -8,5 +8,5 @@
     "check.js",
     "kit.css"
   ],
-  "hash": "29776320f787e855dee8920cc8a5f4164c577e65585a46e9e8a8517c080c3882"
+  "hash": "0cce37ea6612402f500d48ccd810ce334d980254afe59a45f59e617b92478c9d"
 }
