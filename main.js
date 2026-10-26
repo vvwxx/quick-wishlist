@@ -1,14 +1,82 @@
 "use strict";
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __commonJS = (cb, mod) => function __require() {
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+};
 
-const {
-  Plugin, Modal, Notice, TFile, PluginSettingTab, Setting, Keymap,
-  AbstractInputSuggest, BasesView, requestUrl, normalizePath, parseYaml,
+// src/kit/i18n.js
+var require_i18n = __commonJS({
+  "src/kit/i18n.js"(exports2, module2) {
+    "use strict";
+    var KIT_STRINGS = {
+      en: {
+        toTop: "Move to top",
+        edit: "Edit",
+        remove: "Remove",
+        removeConfirm: "Remove?",
+        add: "Add",
+        newItem: "New item\u2026 (Enter adds)",
+        empty: "Nothing yet."
+      },
+      pt: {
+        toTop: "P\xF4r no topo",
+        edit: "Editar",
+        remove: "Remover",
+        removeConfirm: "Remover?",
+        add: "Adicionar",
+        newItem: "Novo item\u2026 (Enter adiciona)",
+        empty: "Nada ainda."
+      }
+    };
+    function obsidianLanguage() {
+      try {
+        return String(window.localStorage.getItem("language") || window.moment?.locale() || "en").toLowerCase();
+      } catch {
+        return "en";
+      }
+    }
+    function resolveLanguage2(setting, detect = obsidianLanguage) {
+      const lang = setting === "auto" || !setting ? detect() : String(setting).toLowerCase();
+      return lang.startsWith("pt") ? "pt" : "en";
+    }
+    function createT2(strings, getLang, warn = console.warn) {
+      const warned = /* @__PURE__ */ new Set();
+      const pick = (lang, key) => strings[lang]?.[key] ?? KIT_STRINGS[lang]?.[key];
+      return (key, vars = {}) => {
+        const lang = getLang();
+        let text = pick(lang, key);
+        if (text === void 0) {
+          if (!warned.has(`${lang}:${key}`)) {
+            warned.add(`${lang}:${key}`);
+            warn(`[kit] missing text "${key}" in ${lang}`);
+          }
+          text = pick("en", key) ?? "";
+        }
+        return text.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ""));
+      };
+    }
+    module2.exports = { KIT_STRINGS, resolveLanguage: resolveLanguage2, createT: createT2 };
+  }
+});
+
+// src/main.js
+var {
+  Plugin,
+  Modal,
+  Notice,
+  TFile,
+  PluginSettingTab,
+  Setting,
+  Keymap,
+  AbstractInputSuggest,
+  BasesView,
+  requestUrl,
+  normalizePath,
+  parseYaml
 } = require("obsidian");
-
-const SMART_VIEW = "qw-smart-categories";
-
-// Interface text. {name} placeholders are filled by t().
-const STRINGS = {
+var { resolveLanguage, createT } = require_i18n();
+var SMART_VIEW = "qw-smart-categories";
+var STRINGS = {
   en: {
     cmdNewItem: "New wishlist item",
     cmdCreateBase: "Create wishlist base",
@@ -33,13 +101,13 @@ const STRINGS = {
     next: "Next",
     back: "Back",
     save: "Save",
-    hintNext: "Enter: next · Esc: cancel",
-    hintSave: "Ctrl+Enter: save · Esc: cancel",
-    rankPlaceholder: "{rank} (end of the list) · 1.1, 1.2 for related items",
+    hintNext: "Enter: next \xB7 Esc: cancel",
+    hintSave: "Ctrl+Enter: save \xB7 Esc: cancel",
+    rankPlaceholder: "{rank} (end of the list) \xB7 1.1, 1.2 for related items",
     pasteHere: "Paste an image or an image link here (Ctrl+V)",
     pasteOptional: "Optional. Press Enter to skip.",
-    pasteReplace: "Ctrl+V again to replace · Delete to remove",
-    downloading: "Downloading image…",
+    pasteReplace: "Ctrl+V again to replace \xB7 Delete to remove",
+    downloading: "Downloading image\u2026",
     productRequired: "Product is required.",
     added: "Added to wishlist: {name}",
     purchased: "Purchased: {name}",
@@ -91,8 +159,8 @@ const STRINGS = {
     setReasonsHeading: "Reasons heading",
     setLinkLabel: "Link label",
     setLinkLabelDesc: "Text of the buy link in the base. Applies to bases created after the change.",
-    setIntercept: "Base \"New\" button opens the form",
-    setInterceptDesc: "In bases that show the wishlist folder, the \"New\" button opens this form instead of the small popover.",
+    setIntercept: 'Base "New" button opens the form',
+    setInterceptDesc: 'In bases that show the wishlist folder, the "New" button opens this form instead of the small popover.',
     setFill: "Fill notes created elsewhere",
     setFillDesc: "Adds the wishlist properties and sections to empty notes created in the folder.",
     // Base
@@ -115,7 +183,7 @@ const STRINGS = {
     noCategory: "(no category)",
     viewSmart: "Smart categories",
     others: "Others",
-    emptyView: "No items yet.",
+    emptyView: "No items yet."
   },
   pt: {
     cmdNewItem: "Novo item da wishlist",
@@ -128,87 +196,87 @@ const STRINGS = {
     stepReasons: "Por que eu quero",
     product: "Produto",
     brand: "Marca",
-    price: "Preço",
+    price: "Pre\xE7o",
     currency: "Moeda",
     category: "Categorias",
-    categoryPlaceholder: "Enter ou vírgula para adicionar",
+    categoryPlaceholder: "Enter ou v\xEDrgula para adicionar",
     priority: "Prioridade",
     rank: "Rank",
     link: "Link do produto",
     store: "Loja",
     reasons: "Motivos",
     optional: "opcional",
-    next: "Próximo",
+    next: "Pr\xF3ximo",
     back: "Voltar",
     save: "Salvar",
-    hintNext: "Enter: próximo · Esc: cancelar",
-    hintSave: "Ctrl+Enter: salvar · Esc: cancelar",
-    rankPlaceholder: "{rank} (fim da lista) · 1.1, 1.2 para itens relacionados",
+    hintNext: "Enter: pr\xF3ximo \xB7 Esc: cancelar",
+    hintSave: "Ctrl+Enter: salvar \xB7 Esc: cancelar",
+    rankPlaceholder: "{rank} (fim da lista) \xB7 1.1, 1.2 para itens relacionados",
     pasteHere: "Cole aqui uma imagem ou o link de uma imagem (Ctrl+V)",
     pasteOptional: "Opcional. Aperte Enter para pular.",
-    pasteReplace: "Ctrl+V de novo para trocar · Delete para remover",
-    downloading: "Baixando a imagem…",
-    productRequired: "O produto é obrigatório.",
-    added: "Adicionado à wishlist: {name}",
+    pasteReplace: "Ctrl+V de novo para trocar \xB7 Delete para remover",
+    downloading: "Baixando a imagem\u2026",
+    productRequired: "O produto \xE9 obrigat\xF3rio.",
+    added: "Adicionado \xE0 wishlist: {name}",
     purchased: "Comprado: {name}",
     backToWant: "De volta para quero: {name}",
-    imageFailed: "Não foi possível carregar essa imagem.",
-    saveFailed: "Não foi possível salvar o item. Veja o console.",
+    imageFailed: "N\xE3o foi poss\xEDvel carregar essa imagem.",
+    saveFailed: "N\xE3o foi poss\xEDvel salvar o item. Veja o console.",
     nothingToPaste: "Nada para colar: copie uma imagem ou o link de uma imagem.",
-    baseExists: "{path} já existe.",
-    badYaml: "Quick Wishlist: as propriedades extras não são um YAML válido.",
+    baseExists: "{path} j\xE1 existe.",
+    badYaml: "Quick Wishlist: as propriedades extras n\xE3o s\xE3o um YAML v\xE1lido.",
     setLanguage: "Idioma",
-    setLanguageDesc: "Idioma do formulário e das configurações. Os nomes dos comandos mudam depois de reiniciar o Obsidian.",
-    langAuto: "Automático (igual ao Obsidian)",
+    setLanguageDesc: "Idioma do formul\xE1rio e das configura\xE7\xF5es. Os nomes dos comandos mudam depois de reiniciar o Obsidian.",
+    langAuto: "Autom\xE1tico (igual ao Obsidian)",
     setFolder: "Pasta da wishlist",
-    setFolderDesc: "Onde os itens são criados. Notas criadas aqui de outro jeito também são completadas.",
+    setFolderDesc: "Onde os itens s\xE3o criados. Notas criadas aqui de outro jeito tamb\xE9m s\xE3o completadas.",
     setCurrencies: "Moedas",
-    setCurrenciesDesc: "Símbolo e como 1234,56 é escrito. A estrela marca a padrão.",
+    setCurrenciesDesc: "S\xEDmbolo e como 1234,56 \xE9 escrito. A estrela marca a padr\xE3o.",
     setPriorities: "Prioridades",
-    setPrioritiesDesc: "Na ordem em que aparecem no formulário. A estrela marca a padrão.",
+    setPrioritiesDesc: "Na ordem em que aparecem no formul\xE1rio. A estrela marca a padr\xE3o.",
     secGeneral: "Geral",
     secStatus: "Status",
     secNote: "Textos da nota",
-    secNoteDesc: "Títulos escritos em todo item novo.",
+    secNoteDesc: "T\xEDtulos escritos em todo item novo.",
     secBase: "Base",
-    secAdvanced: "Avançado",
+    secAdvanced: "Avan\xE7ado",
     secAdvancedDesc: "Tag, propriedades extras e escondidas.",
     show: "Mostrar",
     hide: "Esconder",
-    symbol: "Símbolo",
+    symbol: "S\xEDmbolo",
     addCurrency: "Adicionar moeda",
     addPriority: "Adicionar prioridade",
-    makeDefault: "Tornar padrão",
-    isDefault: "Padrão",
+    makeDefault: "Tornar padr\xE3o",
+    isDefault: "Padr\xE3o",
     remove: "Remover",
     moveUp: "Subir",
     moveDown: "Descer",
     previewInBase: "na base",
     setStatus: "Status dos itens novos",
-    setStatusDesc: "A base mostra esses itens nas visualizações de Quero.",
+    setStatusDesc: "A base mostra esses itens nas visualiza\xE7\xF5es de Quero.",
     setBoughtStatus: "Status dos itens comprados",
-    setBoughtStatusDesc: "A base mostra esses itens na visualização Comprados.",
+    setBoughtStatusDesc: "A base mostra esses itens na visualiza\xE7\xE3o Comprados.",
     setTag: "Tag",
     setTagDesc: "Adicionada a todo item.",
     setExtra: "Propriedades extras",
     setExtraDesc: "YAML opcional adicionado a todo item novo, por exemplo: tipo: desejo",
     setHidden: "Propriedades escondidas",
-    setHiddenDesc: "Separadas por vírgula. Ficam na nota, mas não aparecem nas propriedades dos itens da wishlist, por exemplo: tipo",
-    setPhotoHeading: "Título da foto",
-    setReasonsHeading: "Título dos motivos",
+    setHiddenDesc: "Separadas por v\xEDrgula. Ficam na nota, mas n\xE3o aparecem nas propriedades dos itens da wishlist, por exemplo: tipo",
+    setPhotoHeading: "T\xEDtulo da foto",
+    setReasonsHeading: "T\xEDtulo dos motivos",
     setLinkLabel: "Texto do link",
-    setLinkLabelDesc: "Texto do link de compra na base. Vale para as bases criadas depois da mudança.",
-    setIntercept: "Botão \"Novo\" da base abre o formulário",
-    setInterceptDesc: "Nas bases que mostram a pasta da wishlist, o botão \"Novo\" abre este formulário no lugar da janelinha.",
+    setLinkLabelDesc: "Texto do link de compra na base. Vale para as bases criadas depois da mudan\xE7a.",
+    setIntercept: 'Bot\xE3o "Novo" da base abre o formul\xE1rio',
+    setInterceptDesc: 'Nas bases que mostram a pasta da wishlist, o bot\xE3o "Novo" abre este formul\xE1rio no lugar da janelinha.',
     setFill: "Completar notas criadas de outro jeito",
-    setFillDesc: "Adiciona as propriedades e seções da wishlist às notas vazias criadas na pasta.",
+    setFillDesc: "Adiciona as propriedades e se\xE7\xF5es da wishlist \xE0s notas vazias criadas na pasta.",
     viewAll: "Todos",
     viewWant: "Quero",
     viewByCategory: "Por categoria",
     viewReorder: "Reordenar",
     viewPurchased: "Comprados",
     colItem: "Item",
-    colPrice: "Preço",
+    colPrice: "Pre\xE7o",
     colAmount: "Valor",
     colCurrency: "Moeda",
     colCategories: "Categorias",
@@ -220,15 +288,12 @@ const STRINGS = {
     noCategory: "(sem categoria)",
     viewSmart: "Categorias inteligentes",
     others: "Outros",
-    emptyView: "Nenhum item ainda.",
-  },
+    emptyView: "Nenhum item ainda."
+  }
 };
-
-// Values written into notes. Only used as the starting settings, so changing
-// the language later never breaks the filters of existing notes.
-const LOCALE_DEFAULTS = {
+var LOCALE_DEFAULTS = {
   en: {
-    currencies: "$ = 1,234.56\n€ = 1.234,56\nR$ = 1.234,56",
+    currencies: "$ = 1,234.56\n\u20AC = 1.234,56\nR$ = 1.234,56",
     defaultCurrency: "$",
     priorities: "high, medium, low",
     defaultPriority: "medium",
@@ -236,71 +301,60 @@ const LOCALE_DEFAULTS = {
     boughtStatus: "purchased",
     photoHeading: "Photo",
     reasonsHeading: "Why I want it",
-    linkLabel: "Link to buy",
+    linkLabel: "Link to buy"
   },
   pt: {
-    currencies: "R$ = 1.234,56\n$ = 1,234.56\n€ = 1.234,56",
+    currencies: "R$ = 1.234,56\n$ = 1,234.56\n\u20AC = 1.234,56",
     defaultCurrency: "R$",
-    priorities: "alta, média, baixa",
-    defaultPriority: "média",
+    priorities: "alta, m\xE9dia, baixa",
+    defaultPriority: "m\xE9dia",
     status: "quero",
     boughtStatus: "comprado",
     photoHeading: "Foto",
     reasonsHeading: "Por que eu quero",
-    linkLabel: "Link para comprar",
-  },
+    linkLabel: "Link para comprar"
+  }
 };
-
-const DEFAULT_SETTINGS = {
+var DEFAULT_SETTINGS = {
   language: "auto",
   folder: "Wishlist",
   tag: "wishlist",
   extraFrontmatter: "",
   hiddenProperties: "",
   fillNewNotes: true,
-  interceptNewButton: true,
+  interceptNewButton: true
 };
-
-const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "avif", "svg", "bmp"];
-
-const IMAGE_TYPES = {
-  "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif", "image/avif": "avif",
+var IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "avif", "svg", "bmp"];
+var IMAGE_TYPES = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/avif": "avif"
 };
-
-function obsidianLanguage() {
-  return String(window.localStorage.getItem("language") || window.moment?.locale() || "en").toLowerCase();
-}
-
-function resolveLanguage(setting) {
-  const lang = setting === "auto" || !setting ? obsidianLanguage() : String(setting).toLowerCase();
-  return lang.startsWith("pt") ? "pt" : "en";
-}
-
 module.exports = class QuickWishlist extends Plugin {
   async onload() {
     const saved = await this.loadData();
     const lang = resolveLanguage(saved?.language ?? DEFAULT_SETTINGS.language);
     this.settings = Object.assign({}, DEFAULT_SETTINGS, LOCALE_DEFAULTS[lang], saved);
-    // Old settings name for the purchased status.
-    if (saved && saved.boughtStatus === undefined) this.settings.boughtStatus = LOCALE_DEFAULTS[lang].boughtStatus;
+    if (saved && saved.boughtStatus === void 0) this.settings.boughtStatus = LOCALE_DEFAULTS[lang].boughtStatus;
     this.addSettingTab(new QuickWishlistSettingTab(this.app, this));
-
     this.addCommand({
       id: "new-item",
       name: this.t("cmdNewItem"),
-      callback: () => new WishlistModal(this.app, this).open(),
+      callback: () => new WishlistModal(this.app, this).open()
     });
     this.addCommand({
       id: "create-base",
       name: this.t("cmdCreateBase"),
-      callback: () => this.createBase(),
+      callback: () => this.createBase()
     });
     this.addCommand({
       id: "fill-note",
       name: this.t("cmdFillNote"),
       editorCallback: async (_editor, view) => {
         if (view.file) await this.fillNote(view.file, { force: true });
-      },
+      }
     });
     this.addCommand({
       id: "toggle-purchased",
@@ -310,20 +364,15 @@ module.exports = class QuickWishlist extends Plugin {
         if (!file || !this.isWishlistNote(file)) return false;
         if (!checking) this.togglePurchased(file).catch(console.error);
         return true;
-      },
+      }
     });
-
-    // "Smart categories" view type for bases (Obsidian 1.10+).
     if (BasesView && typeof this.registerBasesView === "function") {
       this.registerBasesView(SMART_VIEW, {
         name: this.t("viewSmart"),
         icon: "lucide-sparkles",
-        factory: (controller, containerEl) => new SmartCategoriesView(controller, containerEl, this),
+        factory: (controller, containerEl) => new SmartCategoriesView(controller, containerEl, this)
       });
     }
-
-    // Notes created in the wishlist folder some other way (the file explorer,
-    // a hotkey...) get the same properties and sections.
     this.app.workspace.onLayoutReady(() => {
       this.registerEvent(this.app.vault.on("create", (file) => {
         if (!this.settings.fillNewNotes || !this.isWishlistNote(file)) return;
@@ -332,12 +381,12 @@ module.exports = class QuickWishlist extends Plugin {
       this.indexBases();
       this.registerEvent(this.app.vault.on("create", (f) => this.indexBase(f)));
       this.registerEvent(this.app.vault.on("modify", (f) => this.indexBase(f)));
-      this.registerEvent(this.app.vault.on("rename", (f, old) => { this.wishlistBases.delete(old); this.indexBase(f); }));
+      this.registerEvent(this.app.vault.on("rename", (f, old) => {
+        this.wishlistBases.delete(old);
+        this.indexBase(f);
+      }));
       this.registerEvent(this.app.vault.on("delete", (f) => this.wishlistBases.delete(f.path)));
     });
-
-    // The "New" button of a wishlist base opens the form instead of the
-    // small popover. Capture phase, so it runs before the base's own handler.
     const intercept = (e) => {
       if (!this.settings.interceptNewButton) return;
       if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") return;
@@ -351,9 +400,6 @@ module.exports = class QuickWishlist extends Plugin {
     };
     this.registerDomEvent(document, "click", intercept, { capture: true });
     this.registerDomEvent(document, "keydown", intercept, { capture: true });
-
-    // Hidden properties: open wishlist notes get a class, and a style rule
-    // hides the chosen keys only inside them.
     this.hiddenStyle = document.head.createEl("style", { attr: { id: "qw-hidden-properties" } });
     this.register(() => this.hiddenStyle.remove());
     this.updateHiddenStyle();
@@ -366,35 +412,27 @@ module.exports = class QuickWishlist extends Plugin {
     this.registerEvent(this.app.workspace.on("layout-change", mark));
     this.register(() => document.querySelectorAll(".qw-wishlist-note").forEach((el) => el.removeClass("qw-wishlist-note")));
   }
-
   updateHiddenStyle() {
-    this.hiddenStyle.textContent = this.list(this.settings.hiddenProperties)
-      .map((key) => `.qw-wishlist-note .metadata-property[data-property-key="${CSS.escape(key)}"] { display: none; }`)
-      .join("\n");
+    this.hiddenStyle.textContent = this.list(this.settings.hiddenProperties).map((key) => `.qw-wishlist-note .metadata-property[data-property-key="${CSS.escape(key)}"] { display: none; }`).join("\n");
   }
-
   get lang() {
     return resolveLanguage(this.settings.language);
   }
-
   t(key, vars = {}) {
-    const text = STRINGS[this.lang][key] ?? STRINGS.en[key] ?? key;
-    return text.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ""));
+    this.translate ??= createT(STRINGS, () => this.lang);
+    return this.translate(key, vars);
   }
-
   async saveSettings() {
     await this.saveData(this.settings);
   }
-
   // Bases whose items live in the wishlist folder, kept in memory so the
   // click handler can decide synchronously.
   async indexBases() {
-    this.wishlistBases = this.wishlistBases ?? new Set();
+    this.wishlistBases = this.wishlistBases ?? /* @__PURE__ */ new Set();
     for (const f of this.app.vault.getFiles()) await this.indexBase(f);
   }
-
   async indexBase(file) {
-    this.wishlistBases = this.wishlistBases ?? new Set();
+    this.wishlistBases = this.wishlistBases ?? /* @__PURE__ */ new Set();
     if (!(file instanceof TFile) || file.extension !== "base") return;
     const text = await this.app.vault.cachedRead(file);
     const folder = JSON.stringify(this.folder).slice(1, -1);
@@ -402,9 +440,7 @@ module.exports = class QuickWishlist extends Plugin {
     if (usesFolder) this.wishlistBases.add(file.path);
     else this.wishlistBases.delete(file.path);
   }
-
   baseFileFor(el) {
-    // Base embedded in a note: ![[Wishlist.base#View]]
     const embed = el.closest(".internal-embed[src]");
     if (embed) {
       const link = embed.getAttribute("src").split("#")[0];
@@ -413,7 +449,6 @@ module.exports = class QuickWishlist extends Plugin {
     }
     return this.leafFor(el)?.view?.file ?? null;
   }
-
   leafFor(el) {
     let found = null;
     this.app.workspace.iterateAllLeaves((leaf) => {
@@ -421,19 +456,15 @@ module.exports = class QuickWishlist extends Plugin {
     });
     return found;
   }
-
   get folder() {
     return normalizePath(this.settings.folder || DEFAULT_SETTINGS.folder);
   }
-
   isWishlistNote(file) {
     return file instanceof TFile && file.extension === "md" && file.path.startsWith(`${this.folder}/`);
   }
-
   list(text) {
     return String(text ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   }
-
   currencies() {
     const result = [];
     for (const line of String(this.settings.currencies ?? "").split("\n")) {
@@ -444,14 +475,12 @@ module.exports = class QuickWishlist extends Plugin {
     }
     return result.length ? result : [{ symbol: "$", thousands: ",", decimal: "." }];
   }
-
   currency(symbol) {
     const all = this.currencies();
     return all.find((c) => c.symbol === symbol) ?? all[0];
   }
-
   valuesOf(key) {
-    const seen = new Set();
+    const seen = /* @__PURE__ */ new Set();
     for (const f of this.app.vault.getMarkdownFiles()) {
       if (!this.isWishlistNote(f)) continue;
       const v = this.app.metadataCache.getFileCache(f)?.frontmatter?.[key];
@@ -459,16 +488,11 @@ module.exports = class QuickWishlist extends Plugin {
     }
     return [...seen].sort((a, b) => a.localeCompare(b));
   }
-
   // Next multiple of 10 after the highest rank: new items go to the end.
   nextRank() {
-    const ranks = this.app.vault.getMarkdownFiles()
-      .filter((f) => this.isWishlistNote(f))
-      .map((f) => Number(this.app.metadataCache.getFileCache(f)?.frontmatter?.rank))
-      .filter((n) => Number.isFinite(n));
+    const ranks = this.app.vault.getMarkdownFiles().filter((f) => this.isWishlistNote(f)).map((f) => Number(this.app.metadataCache.getFileCache(f)?.frontmatter?.rank)).filter((n) => Number.isFinite(n));
     return ranks.length ? Math.floor(Math.max(...ranks) / 10) * 10 + 10 : 10;
   }
-
   extraFrontmatter() {
     const text = String(this.settings.extraFrontmatter ?? "").trim();
     if (!text) return {};
@@ -480,7 +504,6 @@ module.exports = class QuickWishlist extends Plugin {
       return {};
     }
   }
-
   defaultProperties() {
     const s = this.settings;
     return {
@@ -495,15 +518,20 @@ module.exports = class QuickWishlist extends Plugin {
       link: null,
       store: null,
       created: window.moment().format("YYYY-MM-DD"),
-      tags: [s.tag],
+      tags: [s.tag]
     };
   }
-
   sections(embed = "", reasons = "") {
     const s = this.settings;
-    return `## ${s.photoHeading}\n\n${embed ? `${embed}\n` : ""}\n## ${s.reasonsHeading}\n\n${reasons || "- "}\n`;
-  }
+    return `## ${s.photoHeading}
 
+${embed ? `${embed}
+` : ""}
+## ${s.reasonsHeading}
+
+${reasons || "- "}
+`;
+  }
   async fillNote(file, { force = false } = {}) {
     if (!this.app.vault.getFileByPath(file.path)) return;
     if (!force && !this.isWishlistNote(file)) return;
@@ -519,7 +547,6 @@ module.exports = class QuickWishlist extends Plugin {
       return body.trim() ? text : text.replace(/\n*$/, "\n") + this.sections();
     });
   }
-
   // Switches the open item between "want" and "purchased", keeping the date.
   async togglePurchased(file) {
     const s = this.settings;
@@ -532,7 +559,6 @@ module.exports = class QuickWishlist extends Plugin {
     });
     new Notice(this.t(purchased ? "purchased" : "backToWant", { name: file.basename }));
   }
-
   async createBase() {
     const path = normalizePath(`${this.folder}/Wishlist.base`);
     if (this.app.vault.getAbstractFileByPath(path)) {
@@ -544,8 +570,6 @@ module.exports = class QuickWishlist extends Plugin {
     await this.app.workspace.getLeaf(false).openFile(file);
   }
 };
-
-// Bases formula that formats the price with each currency's separators.
 function priceFormula(plugin) {
   const fmt = (c) => {
     let expr = "price.toFixed(2)";
@@ -558,7 +582,6 @@ function priceFormula(plugin) {
   for (const c of all.slice(1).reverse()) chain = `if(currency == ${JSON.stringify(c.symbol)}, ${fmt(c)}, ${chain})`;
   return `if(price.isEmpty(), "", ${chain})`;
 }
-
 function buildBase(plugin) {
   const s = plugin.settings;
   const t = (k) => plugin.t(k);
@@ -684,31 +707,20 @@ ${cards}
         direction: DESC
 `;
 }
-
-// Puts every item in exactly one category group, picking the best one:
-// 1. Only categories shared by 2+ items count (no group of one by accident).
-// 2. A subcategory wins: if every item of A is also in B, A is the more
-//    specific group (underwear inside clothes).
-// 3. Otherwise the biggest category wins, then the order the user typed.
-// 4. If the others' choices would leave an item alone, it moves to its next
-//    best category.
-// Items left without a pair (or without categories) go to "Others", last.
-// Biggest groups first.
 function smartGroups(items, categoriesOf, others) {
   const catsOf = new Map(items.map((item) => [item, categoriesOf(item)]));
-  const members = new Map();
+  const members = /* @__PURE__ */ new Map();
   for (const [item, cats] of catsOf) {
-    for (const c of cats) (members.get(c) ?? members.set(c, new Set()).get(c)).add(item);
+    for (const c of cats) (members.get(c) ?? members.set(c, /* @__PURE__ */ new Set()).get(c)).add(item);
   }
   const isSubcategory = (a, b) => {
     const A = members.get(a), B = members.get(b);
     return a !== b && A.size < B.size && [...A].every((item) => B.has(item));
   };
-
-  const banned = new Map();
-  let assignment = new Map();
+  const banned = /* @__PURE__ */ new Map();
+  let assignment = /* @__PURE__ */ new Map();
   for (let round = 0; round < 20; round++) {
-    assignment = new Map();
+    assignment = /* @__PURE__ */ new Map();
     for (const [item, cats] of catsOf) {
       const candidates = cats.filter((c) => members.get(c).size >= 2 && !banned.get(item)?.has(c));
       if (!candidates.length) {
@@ -719,51 +731,42 @@ function smartGroups(items, categoriesOf, others) {
       specific.sort((a, b) => members.get(b).size - members.get(a).size || cats.indexOf(a) - cats.indexOf(b));
       assignment.set(item, specific[0]);
     }
-    const size = new Map();
-    for (const g of assignment.values()) size.set(g, (size.get(g) ?? 0) + 1);
+    const size2 = /* @__PURE__ */ new Map();
+    for (const g of assignment.values()) size2.set(g, (size2.get(g) ?? 0) + 1);
     let changed = false;
     for (const [item, g] of assignment) {
-      if (size.get(g) !== 1 || (members.get(g)?.size ?? 0) < 2) continue;
-      // Only move items that have somewhere else to go; the rest wait, since
-      // someone may join them in the next round.
-      const alternatives = catsOf.get(item).filter((c) =>
-        c !== g && members.get(c).size >= 2 && !banned.get(item)?.has(c));
+      if (size2.get(g) !== 1 || (members.get(g)?.size ?? 0) < 2) continue;
+      const alternatives = catsOf.get(item).filter((c) => c !== g && members.get(c).size >= 2 && !banned.get(item)?.has(c));
       if (!alternatives.length) continue;
-      (banned.get(item) ?? banned.set(item, new Set()).get(item)).add(g);
+      (banned.get(item) ?? banned.set(item, /* @__PURE__ */ new Set()).get(item)).add(g);
       changed = true;
     }
     if (!changed) break;
   }
-
-  const size = new Map();
+  const size = /* @__PURE__ */ new Map();
   for (const g of assignment.values()) size.set(g, (size.get(g) ?? 0) + 1);
-  const groups = new Map();
+  const groups = /* @__PURE__ */ new Map();
   for (const item of items) {
     let g = assignment.get(item);
     if (size.get(g) < 2) g = others;
     (groups.get(g) ?? groups.set(g, []).get(g)).push(item);
   }
-  return [...groups.entries()].sort(([a, x], [b, y]) =>
-    (a === others) - (b === others) || y.length - x.length || a.localeCompare(b));
+  return [...groups.entries()].sort(([a, x], [b, y]) => (a === others) - (b === others) || y.length - x.length || a.localeCompare(b));
 }
-
-const SmartCategoriesView = BasesView ? class extends BasesView {
+var SmartCategoriesView = BasesView ? class extends BasesView {
   constructor(controller, containerEl, plugin) {
     super(controller);
     this.type = SMART_VIEW;
     this.plugin = plugin;
     this.rootEl = containerEl.createDiv("qw-smart");
   }
-
   onDataUpdated() {
     this.render();
   }
-
   categoriesOf(entry) {
     const raw = this.app.metadataCache.getFileCache(entry.file)?.frontmatter?.categories;
     return [...new Set([].concat(raw ?? []).map((c) => String(c ?? "").trim()).filter(Boolean))];
   }
-
   photoOf(file) {
     const embeds = this.app.metadataCache.getFileCache(file)?.embeds ?? [];
     for (const e of embeds) {
@@ -772,7 +775,6 @@ const SmartCategoriesView = BasesView ? class extends BasesView {
     }
     return null;
   }
-
   render() {
     const root = this.rootEl;
     root.empty();
@@ -791,7 +793,6 @@ const SmartCategoriesView = BasesView ? class extends BasesView {
       for (const entry of items) this.renderCard(grid, entry, props);
     }
   }
-
   renderCard(grid, entry, props) {
     const file = entry.file;
     const card = grid.createDiv({ cls: "qw-card", attr: { tabindex: "0" } });
@@ -811,47 +812,54 @@ const SmartCategoriesView = BasesView ? class extends BasesView {
         const a = valueEl.createEl("a", {
           cls: "external-link",
           href: text,
-          text: prop.startsWith("formula.") ? this.plugin.settings.linkLabel : text,
+          text: prop.startsWith("formula.") ? this.plugin.settings.linkLabel : text
         });
         a.addEventListener("click", (e) => e.stopPropagation());
       } else valueEl.setText(text);
     }
     const open = (e) => this.app.workspace.getLeaf(Keymap.isModEvent(e)).openFile(file);
     card.addEventListener("click", open);
-    card.addEventListener("keydown", (e) => { if (e.key === "Enter") open(e); });
+    card.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") open(e);
+    });
   }
 } : null;
-
-// Three-step form built for the keyboard: Enter goes to the next step,
-// Ctrl/Cmd+Enter saves on the last one, Esc cancels.
-class WishlistModal extends Modal {
+var WishlistModal = class extends Modal {
   constructor(app, plugin) {
     super(app);
     this.plugin = plugin;
     const s = plugin.settings;
     this.step = 0;
     this.data = {
-      product: "", brand: "", price: "", currency: plugin.currency(s.defaultCurrency).symbol, categories: [], categoryDraft: "",
-      priority: s.defaultPriority, rank: "", link: "", store: "", reasons: "",
+      product: "",
+      brand: "",
+      price: "",
+      currency: plugin.currency(s.defaultCurrency).symbol,
+      categories: [],
+      categoryDraft: "",
+      priority: s.defaultPriority,
+      rank: "",
+      link: "",
+      store: "",
+      reasons: ""
     };
-    this.image = null; // { buffer, ext, previewUrl }
+    this.image = null;
   }
-
   t(key, vars) {
     return this.plugin.t(key, vars);
   }
-
   onOpen() {
     this.containerEl.addClass("qw-modal");
-    this.scope.register(["Mod"], "Enter", () => { this.save(); return false; });
+    this.scope.register(["Mod"], "Enter", () => {
+      this.save();
+      return false;
+    });
     this.render();
   }
-
   onClose() {
     if (this.image?.previewUrl) URL.revokeObjectURL(this.image.previewUrl);
     this.contentEl.empty();
   }
-
   render() {
     const { contentEl } = this;
     contentEl.empty();
@@ -860,86 +868,76 @@ class WishlistModal extends Modal {
     head.createEl("h2", { text: this.t("formTitle") });
     const steps = head.createDiv("qw-steps");
     titles.forEach((title, i) => steps.createSpan({
-      text: `${i + 1}. ${title}`, cls: i === this.step ? "is-active" : i < this.step ? "is-done" : "",
+      text: `${i + 1}. ${title}`,
+      cls: i === this.step ? "is-active" : i < this.step ? "is-done" : ""
     }));
-
     const body = contentEl.createDiv("qw-body");
     if (this.step === 0) this.renderDetails(body);
     if (this.step === 1) this.renderPhoto(body);
     if (this.step === 2) this.renderReasons(body);
-
     const footer = contentEl.createDiv("qw-footer");
     footer.createSpan({ cls: "qw-hint", text: this.t(this.step < 2 ? "hintNext" : "hintSave") });
     const buttons = footer.createDiv("qw-buttons");
     if (this.step > 0) buttons.createEl("button", { text: this.t("back") }).onclick = () => this.go(this.step - 1);
     const main = buttons.createEl("button", { text: this.t(this.step < 2 ? "next" : "save"), cls: "mod-cta" });
-    main.onclick = () => (this.step < 2 ? this.next() : this.save());
+    main.onclick = () => this.step < 2 ? this.next() : this.save();
   }
-
   field(parent, label, optional) {
     const row = parent.createDiv("qw-field");
     const el = row.createEl("label", { text: label });
     if (optional) el.createSpan({ text: ` ${this.t("optional")}`, cls: "qw-optional" });
     return row;
   }
-
   text(parent, key, label, { optional = false, suggestions = null } = {}) {
     const row = this.field(parent, label, optional);
     const input = row.createEl("input", { type: "text" });
     input.value = this.data[key];
-    // Obsidian-styled suggestions (the native <datalist> ignores the theme).
     const suggest = suggestions?.length ? new ValueSuggest(this.app, input, suggestions) : null;
-    input.addEventListener("input", () => (this.data[key] = input.value));
+    input.addEventListener("input", () => this.data[key] = input.value);
     this.enterGoesNext(input, () => suggest?.isOpen);
     return input;
   }
-
   select(parent, key, label, options, onChange) {
     const row = this.field(parent, label, false);
     const sel = row.createEl("select", { cls: "dropdown" });
     options.forEach((o) => sel.createEl("option", { value: o, text: o }));
     sel.value = this.data[key];
-    sel.addEventListener("change", () => { this.data[key] = sel.value; onChange?.(); });
+    sel.addEventListener("change", () => {
+      this.data[key] = sel.value;
+      onChange?.();
+    });
     this.enterGoesNext(sel);
     return sel;
   }
-
   enterGoesNext(el, busy = () => false) {
     el.addEventListener("keydown", (e) => {
-      // While the suggestion list is open, Enter picks a suggestion.
       if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.isComposing && !busy()) {
         e.preventDefault();
         this.next();
       }
     });
   }
-
   renderDetails(body) {
     const p = this.plugin;
     const product = this.text(body, "product", this.t("product"));
     this.text(body, "brand", this.t("brand"), { optional: true, suggestions: p.valuesOf("brand") });
-
     const price = this.text(body, "price", this.t("price"), { optional: true });
     price.setAttr("inputmode", "decimal");
     price.addEventListener("input", () => {
       price.value = formatPrice(price.value, p.currency(this.data.currency));
       this.data.price = price.value;
     });
-
     const symbols = p.currencies().map((c) => c.symbol);
     let previous = this.data.currency;
     this.select(body, "currency", this.t("currency"), symbols, () => {
-      // Re-read the typed number with the new currency's separators.
       const n = parsePrice(this.data.price, p.currency(previous));
       const c = p.currency(this.data.currency);
       this.data.price = n === null ? "" : formatPrice(String(n).replace(".", c.decimal), c);
       price.value = this.data.price;
       previous = this.data.currency;
     });
-
     this.categoriesField(body);
     this.select(body, "priority", this.t("priority"), p.list(p.settings.priorities));
-
     const rank = this.text(body, "rank", this.t("rank"), { optional: true });
     rank.setAttrs({ inputmode: "decimal", placeholder: this.t("rankPlaceholder", { rank: p.nextRank() }) });
     rank.addEventListener("input", () => {
@@ -947,12 +945,10 @@ class WishlistModal extends Modal {
       rank.value = rest.length ? `${int}.${rest.join("")}` : int;
       this.data.rank = rank.value;
     });
-
     this.text(body, "link", this.t("link"), { optional: true });
     this.text(body, "store", this.t("store"), { optional: true, suggestions: p.valuesOf("store") });
     window.setTimeout(() => product.focus(), 0);
   }
-
   // Several categories as chips: Enter or comma adds, Backspace on an empty
   // field removes the last one, Enter on an empty field goes to the next step.
   categoriesField(body) {
@@ -964,7 +960,7 @@ class WishlistModal extends Modal {
       box.querySelectorAll(".qw-chip").forEach((el) => el.remove());
       for (const c of this.data.categories) {
         const chip = createDiv({ cls: "qw-chip", text: c });
-        const x = chip.createSpan({ cls: "qw-chip-remove", text: "×" });
+        const x = chip.createSpan({ cls: "qw-chip-remove", text: "\xD7" });
         x.addEventListener("click", () => {
           this.data.categories = this.data.categories.filter((v) => v !== c);
           draw();
@@ -982,8 +978,13 @@ class WishlistModal extends Modal {
       this.data.categoryDraft = "";
       draw();
     };
-    const suggest = new ValueSuggest(this.app, input, this.plugin.valuesOf("categories"), (v) => add(v),
-      () => this.data.categories);
+    const suggest = new ValueSuggest(
+      this.app,
+      input,
+      this.plugin.valuesOf("categories"),
+      (v) => add(v),
+      () => this.data.categories
+    );
     input.addEventListener("input", () => {
       if (input.value.includes(",")) add(input.value);
       else this.data.categoryDraft = input.value;
@@ -999,10 +1000,11 @@ class WishlistModal extends Modal {
         draw();
       }
     });
-    box.addEventListener("click", (e) => { if (e.target === box) input.focus(); });
+    box.addEventListener("click", (e) => {
+      if (e.target === box) input.focus();
+    });
     draw();
   }
-
   renderPhoto(body) {
     const zone = body.createDiv({ cls: "qw-drop", attr: { tabindex: "0" } });
     const show = () => {
@@ -1018,7 +1020,7 @@ class WishlistModal extends Modal {
     show();
     zone.addEventListener("paste", async (e) => {
       e.preventDefault();
-      const file = [...(e.clipboardData?.files ?? [])].find((f) => f.type.startsWith("image/"));
+      const file = [...e.clipboardData?.files ?? []].find((f) => f.type.startsWith("image/"));
       try {
         if (file) {
           this.setImage(await file.arrayBuffer(), file.type);
@@ -1040,7 +1042,10 @@ class WishlistModal extends Modal {
       show();
     });
     zone.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) { e.preventDefault(); this.next(); }
+      if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        this.next();
+      }
       if ((e.key === "Delete" || e.key === "Backspace") && this.image) {
         URL.revokeObjectURL(this.image.previewUrl);
         this.image = null;
@@ -1049,26 +1054,22 @@ class WishlistModal extends Modal {
     });
     window.setTimeout(() => zone.focus(), 0);
   }
-
   setImage(buffer, type) {
     const mime = String(type).split(";")[0].trim();
     if (this.image?.previewUrl) URL.revokeObjectURL(this.image.previewUrl);
     const previewUrl = URL.createObjectURL(new Blob([buffer], { type: mime || "image/png" }));
     this.image = { buffer, ext: IMAGE_TYPES[mime] ?? "png", previewUrl };
   }
-
   renderReasons(body) {
     const row = this.field(body, this.t("reasons"), true);
     const area = row.createEl("textarea", { cls: "qw-reasons" });
-    // Works as a bulleted list: starts with "- " and every Enter adds a new "- ".
     area.value = this.data.reasons || "- ";
-    area.addEventListener("input", () => (this.data.reasons = area.value));
+    area.addEventListener("input", () => this.data.reasons = area.value);
     area.addEventListener("keydown", (e) => {
       if (e.key !== "Enter" || e.ctrlKey || e.metaKey || e.shiftKey || e.isComposing) return;
       e.preventDefault();
       const { selectionStart: start, selectionEnd: end, value } = area;
       const lineStart = value.lastIndexOf("\n", start - 1) + 1;
-      // Enter on an empty bullet removes it, like in the editor.
       if (value.slice(lineStart, start).trim() === "-" && value.slice(end).split("\n")[0].trim() === "") {
         area.setRangeText("", lineStart, end, "end");
       } else {
@@ -1081,14 +1082,11 @@ class WishlistModal extends Modal {
       area.setSelectionRange(area.value.length, area.value.length);
     }, 0);
   }
-
   go(step) {
     this.step = step;
     this.render();
   }
-
   next() {
-    // A category typed but not confirmed still counts.
     if (this.data.categoryDraft.trim()) {
       for (const c of this.data.categoryDraft.split(",").map((v) => v.trim()).filter(Boolean)) {
         if (!this.data.categories.includes(c)) this.data.categories.push(c);
@@ -1102,7 +1100,6 @@ class WishlistModal extends Modal {
     if (this.step < 2) this.go(this.step + 1);
     else this.save();
   }
-
   async save() {
     if (this.saving) return;
     if (!this.data.product.trim()) {
@@ -1123,22 +1120,19 @@ class WishlistModal extends Modal {
       this.saving = false;
     }
   }
-}
-
+};
 async function createItem(plugin, data, image) {
   const { app } = plugin;
   const { vault, fileManager } = app;
   const name = data.product.trim().replace(/[\\/:*?"<>|#^[\]]/g, "-");
   if (!vault.getAbstractFileByPath(plugin.folder)) await vault.createFolder(plugin.folder);
   const notePath = freePath(vault, `${plugin.folder}/${name}`, "md");
-
   let embed = "";
   if (image) {
     const imagePath = await fileManager.getAvailablePathForAttachment(`${name}.${image.ext}`, notePath);
     const imageFile = await vault.createBinary(imagePath, image.buffer);
     embed = "!" + fileManager.generateMarkdownLink(imageFile, notePath);
   }
-
   const typedRank = Number(data.rank);
   const props = plugin.defaultProperties();
   Object.assign(props, {
@@ -1149,17 +1143,14 @@ async function createItem(plugin, data, image) {
     priority: data.priority,
     link: data.link.trim() || null,
     brand: data.brand.trim() || null,
-    store: data.store.trim() || null,
+    store: data.store.trim() || null
   });
-
-  const reasons = data.reasons.split("\n").map((l) => l.trim().replace(/^-\s*/, "")).filter(Boolean)
-    .map((l) => `- ${l}`).join("\n");
+  const reasons = data.reasons.split("\n").map((l) => l.trim().replace(/^-\s*/, "")).filter(Boolean).map((l) => `- ${l}`).join("\n");
   const file = await vault.create(notePath, plugin.sections(embed, reasons));
   await fileManager.processFrontMatter(file, (fm) => Object.assign(fm, props));
   return file;
 }
-
-class ValueSuggest extends AbstractInputSuggest {
+var ValueSuggest = class extends AbstractInputSuggest {
   // onPick: called with the chosen value instead of filling the input.
   // exclude: values that should not be suggested (e.g. chips already added).
   constructor(app, input, values, onPick = null, exclude = () => []) {
@@ -1170,17 +1161,14 @@ class ValueSuggest extends AbstractInputSuggest {
     this.exclude = exclude;
     this.isOpen = false;
   }
-
   getSuggestions(query) {
     const q = query.trim().toLowerCase();
     const taken = this.exclude();
     return this.values.filter((v) => v.toLowerCase().includes(q) && v.toLowerCase() !== q && !taken.includes(v));
   }
-
   renderSuggestion(value, el) {
     el.setText(value);
   }
-
   selectSuggestion(value) {
     if (this.onPick) {
       this.onPick(value);
@@ -1190,57 +1178,46 @@ class ValueSuggest extends AbstractInputSuggest {
     }
     this.close();
   }
-
   open() {
     super.open();
     this.isOpen = true;
   }
-
   close() {
     super.close();
     this.isOpen = false;
   }
-}
-
-class FolderSuggest extends AbstractInputSuggest {
+};
+var FolderSuggest = class extends AbstractInputSuggest {
   constructor(app, input) {
     super(app, input);
     this.input = input;
   }
-
   getSuggestions(query) {
     const q = query.trim().toLowerCase();
     return this.app.vault.getAllFolders(false).map((f) => f.path).filter((p) => p.toLowerCase().includes(q)).sort();
   }
-
   renderSuggestion(path, el) {
     el.setText(path);
   }
-
   selectSuggestion(path) {
     this.setValue(path);
     this.input.dispatchEvent(new Event("input"));
     this.close();
   }
-}
-
-const PRICE_FORMATS = ["1,234.56", "1.234,56", "1 234,56", "1'234.56"];
-
-class QuickWishlistSettingTab extends PluginSettingTab {
+};
+var PRICE_FORMATS = ["1,234.56", "1.234,56", "1 234,56", "1'234.56"];
+var QuickWishlistSettingTab = class extends PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
     this.showAdvanced = false;
   }
-
   t(key) {
     return this.plugin.t(key);
   }
-
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    // Lists being edited. Kept here so an empty new row survives a redraw.
     this.currencyList ??= parseCurrencyLines(this.plugin.settings.currencies);
     this.priorityList ??= this.plugin.list(this.plugin.settings.priorities);
     this.sectionGeneral(containerEl);
@@ -1251,64 +1228,48 @@ class QuickWishlistSettingTab extends PluginSettingTab {
     this.sectionBase(containerEl);
     this.sectionAdvanced(containerEl);
   }
-
   hide() {
     this.currencyList = null;
     this.priorityList = null;
   }
-
   heading(el, name, desc) {
     const s = new Setting(el).setName(this.t(name)).setHeading();
     if (desc) s.setDesc(this.t(desc));
     return s;
   }
-
   text(el, name, desc, key, { area = false, onChange } = {}) {
     const p = this.plugin;
-    return new Setting(el).setName(this.t(name)).setDesc(desc ? this.t(desc) : "")[area ? "addTextArea" : "addText"]((c) => c
-      .setValue(String(p.settings[key] ?? ""))
-      .onChange(async (v) => {
-        p.settings[key] = v;
-        await p.saveSettings();
-        onChange?.(v);
-      }));
+    return new Setting(el).setName(this.t(name)).setDesc(desc ? this.t(desc) : "")[area ? "addTextArea" : "addText"]((c) => c.setValue(String(p.settings[key] ?? "")).onChange(async (v) => {
+      p.settings[key] = v;
+      await p.saveSettings();
+      onChange?.(v);
+    }));
   }
-
   // Star and trash buttons shared by the currency and priority rows.
   rowButtons(setting, isDefault, canRemove, onDefault, onRemove) {
     setting.addExtraButton((b) => {
       b.setIcon("star").setTooltip(this.t(isDefault ? "isDefault" : "makeDefault")).onClick(onDefault);
       b.extraSettingsEl.toggleClass("qw-default", isDefault);
     });
-    setting.addExtraButton((b) => b.setIcon("trash").setTooltip(this.t("remove")).setDisabled(!canRemove)
-      .onClick(() => canRemove && onRemove()));
+    setting.addExtraButton((b) => b.setIcon("trash").setTooltip(this.t("remove")).setDisabled(!canRemove).onClick(() => canRemove && onRemove()));
   }
-
   sectionGeneral(el) {
     const p = this.plugin;
     this.heading(el, "secGeneral");
-    new Setting(el).setName(this.t("setLanguage")).setDesc(this.t("setLanguageDesc"))
-      .addDropdown((d) => d
-        .addOption("auto", this.t("langAuto"))
-        .addOption("en", "English")
-        .addOption("pt-BR", "Português (Brasil)")
-        .setValue(p.settings.language)
-        .onChange(async (v) => {
-          p.settings.language = v;
-          await p.saveSettings();
-          this.display();
-        }));
-    new Setting(el).setName(this.t("setFolder")).setDesc(this.t("setFolderDesc"))
-      .addText((c) => {
-        new FolderSuggest(this.app, c.inputEl);
-        c.setPlaceholder(DEFAULT_SETTINGS.folder).setValue(p.settings.folder).onChange(async (v) => {
-          p.settings.folder = v;
-          await p.saveSettings();
-          await p.indexBases();
-        });
+    new Setting(el).setName(this.t("setLanguage")).setDesc(this.t("setLanguageDesc")).addDropdown((d) => d.addOption("auto", this.t("langAuto")).addOption("en", "English").addOption("pt-BR", "Portugu\xEAs (Brasil)").setValue(p.settings.language).onChange(async (v) => {
+      p.settings.language = v;
+      await p.saveSettings();
+      this.display();
+    }));
+    new Setting(el).setName(this.t("setFolder")).setDesc(this.t("setFolderDesc")).addText((c) => {
+      new FolderSuggest(this.app, c.inputEl);
+      c.setPlaceholder(DEFAULT_SETTINGS.folder).setValue(p.settings.folder).onChange(async (v) => {
+        p.settings.folder = v;
+        await p.saveSettings();
+        await p.indexBases();
       });
+    });
   }
-
   sectionCurrencies(el) {
     const p = this.plugin;
     const list = this.currencyList;
@@ -1329,14 +1290,17 @@ class QuickWishlistSettingTab extends PluginSettingTab {
         });
       });
       row.addDropdown((d) => {
-        for (const f of new Set([...PRICE_FORMATS, c.sample])) d.addOption(f, f);
+        for (const f of /* @__PURE__ */ new Set([...PRICE_FORMATS, c.sample])) d.addOption(f, f);
         d.setValue(c.sample).onChange(async (v) => {
           c.sample = v;
           row.setName(`${c.symbol} ${c.sample}`);
           await save();
         });
       });
-      this.rowButtons(row, c.symbol !== "" && c.symbol === p.settings.defaultCurrency, list.length > 1,
+      this.rowButtons(
+        row,
+        c.symbol !== "" && c.symbol === p.settings.defaultCurrency,
+        list.length > 1,
         async () => {
           p.settings.defaultCurrency = c.symbol;
           await save();
@@ -1347,14 +1311,14 @@ class QuickWishlistSettingTab extends PluginSettingTab {
           if (p.settings.defaultCurrency === c.symbol) p.settings.defaultCurrency = list[0].symbol;
           await save();
           this.display();
-        });
+        }
+      );
     });
     new Setting(el).addButton((b) => b.setButtonText(this.t("addCurrency")).onClick(() => {
       list.push({ symbol: "", sample: "1,234.56" });
       this.display();
     }));
   }
-
   sectionPriorities(el) {
     const p = this.plugin;
     const list = this.priorityList;
@@ -1375,11 +1339,12 @@ class QuickWishlistSettingTab extends PluginSettingTab {
         list[i] = v.trim();
         await save();
       }));
-      row.addExtraButton((b) => b.setIcon("arrow-up").setTooltip(this.t("moveUp")).setDisabled(i === 0)
-        .onClick(() => i > 0 && move(i, i - 1)));
-      row.addExtraButton((b) => b.setIcon("arrow-down").setTooltip(this.t("moveDown")).setDisabled(i === list.length - 1)
-        .onClick(() => i < list.length - 1 && move(i, i + 1)));
-      this.rowButtons(row, name !== "" && name === p.settings.defaultPriority, list.length > 1,
+      row.addExtraButton((b) => b.setIcon("arrow-up").setTooltip(this.t("moveUp")).setDisabled(i === 0).onClick(() => i > 0 && move(i, i - 1)));
+      row.addExtraButton((b) => b.setIcon("arrow-down").setTooltip(this.t("moveDown")).setDisabled(i === list.length - 1).onClick(() => i < list.length - 1 && move(i, i + 1)));
+      this.rowButtons(
+        row,
+        name !== "" && name === p.settings.defaultPriority,
+        list.length > 1,
         async () => {
           p.settings.defaultPriority = list[i];
           await save();
@@ -1390,20 +1355,19 @@ class QuickWishlistSettingTab extends PluginSettingTab {
           if (p.settings.defaultPriority === removed) p.settings.defaultPriority = list[0];
           await save();
           this.display();
-        });
+        }
+      );
     });
     new Setting(el).addButton((b) => b.setButtonText(this.t("addPriority")).onClick(() => {
       list.push("");
       this.display();
     }));
   }
-
   sectionStatus(el) {
     this.heading(el, "secStatus");
     this.text(el, "setStatus", "setStatusDesc", "status");
     this.text(el, "setBoughtStatus", "setBoughtStatusDesc", "boughtStatus");
   }
-
   sectionNote(el) {
     const p = this.plugin;
     this.heading(el, "secNote", "secNoteDesc");
@@ -1412,7 +1376,7 @@ class QuickWishlistSettingTab extends PluginSettingTab {
       preview.empty();
       preview.createEl("pre", { text: p.sections("![[photo.png]]", "- ...").trim() });
       const link = preview.createDiv({ cls: "qw-preview-link" });
-      link.createSpan({ text: `${p.settings.linkLabel} ↗` });
+      link.createSpan({ text: `${p.settings.linkLabel} \u2197` });
       link.createSpan({ cls: "qw-preview-caption", text: this.t("previewInBase") });
     };
     this.text(el, "setPhotoHeading", null, "photoHeading", { onChange: update });
@@ -1421,70 +1385,54 @@ class QuickWishlistSettingTab extends PluginSettingTab {
     preview = el.createDiv({ cls: "qw-preview" });
     update();
   }
-
   sectionBase(el) {
     const p = this.plugin;
     this.heading(el, "secBase");
-    const toggle = (name, desc, key) => new Setting(el).setName(this.t(name)).setDesc(this.t(desc))
-      .addToggle((c) => c.setValue(p.settings[key]).onChange(async (v) => {
-        p.settings[key] = v;
-        await p.saveSettings();
-      }));
+    const toggle = (name, desc, key) => new Setting(el).setName(this.t(name)).setDesc(this.t(desc)).addToggle((c) => c.setValue(p.settings[key]).onChange(async (v) => {
+      p.settings[key] = v;
+      await p.saveSettings();
+    }));
     toggle("setIntercept", "setInterceptDesc", "interceptNewButton");
     toggle("setFill", "setFillDesc", "fillNewNotes");
   }
-
   sectionAdvanced(el) {
     const p = this.plugin;
-    this.heading(el, "secAdvanced", "secAdvancedDesc").setClass("qw-advanced-toggle")
-      .addButton((b) => b.setButtonText(this.t(this.showAdvanced ? "hide" : "show")).onClick(() => {
-        this.showAdvanced = !this.showAdvanced;
-        this.display();
-      }));
+    this.heading(el, "secAdvanced", "secAdvancedDesc").setClass("qw-advanced-toggle").addButton((b) => b.setButtonText(this.t(this.showAdvanced ? "hide" : "show")).onClick(() => {
+      this.showAdvanced = !this.showAdvanced;
+      this.display();
+    }));
     if (!this.showAdvanced) return;
     this.text(el, "setTag", "setTagDesc", "tag");
     this.text(el, "setExtra", "setExtraDesc", "extraFrontmatter", { area: true });
     this.text(el, "setHidden", "setHiddenDesc", "hiddenProperties", { onChange: () => p.updateHiddenStyle() });
   }
-}
-
+};
 function freePath(vault, base, ext) {
   let path = normalizePath(`${base}.${ext}`);
   for (let i = 2; vault.getAbstractFileByPath(path); i++) path = normalizePath(`${base} ${i}.${ext}`);
   return path;
 }
-
 function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-
-// Formats while typing: "6000" -> "6,000" or "6.000", keeping up to 2 decimals.
 function formatPrice(text, c) {
-  const clean = String(text).split(c.thousands).join("")
-    .replace(new RegExp(`[^0-9${escapeRegExp(c.decimal)}]`, "g"), "");
+  const clean = String(text).split(c.thousands).join("").replace(new RegExp(`[^0-9${escapeRegExp(c.decimal)}]`, "g"), "");
   const [int, ...rest] = clean.split(c.decimal);
   const intFmt = int.replace(/^0+(?=\d)/, "").replace(/\B(?=(\d{3})+(?!\d))/g, c.thousands);
   return rest.length ? `${intFmt}${c.decimal}${rest.join("").slice(0, 2)}` : intFmt;
 }
-
 function parsePrice(text, c) {
   const s = String(text ?? "").split(c.thousands).join("").replace(c.decimal, ".").trim();
   if (!s) return null;
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
 }
-
-// "R$ = 1.234,56\n$ = 1,234.56" <-> [{ symbol: "R$", sample: "1.234,56" }, ...]
-// The settings tab edits currencies as a list but saves the same text as before.
 function parseCurrencyLines(text) {
-  return String(text ?? "").split("\n").map((l) => l.split("=").map((s) => s.trim()))
-    .filter(([symbol]) => symbol).map(([symbol, sample]) => ({ symbol, sample: sample || "1,234.56" }));
+  return String(text ?? "").split("\n").map((l) => l.split("=").map((s) => s.trim())).filter(([symbol]) => symbol).map(([symbol, sample]) => ({ symbol, sample: sample || "1,234.56" }));
 }
-
 function serializeCurrencyLines(list) {
   return list.filter((c) => c.symbol.trim()).map((c) => `${c.symbol.trim()} = ${c.sample}`).join("\n");
 }
-
 module.exports.formatPrice = formatPrice;
 module.exports.parseCurrencyLines = parseCurrencyLines;
 module.exports.serializeCurrencyLines = serializeCurrencyLines;

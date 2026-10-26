@@ -1,0 +1,11 @@
+{
+  "name": "quick-wishlist",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "test": "node --test test/*.test.mjs",
+    "install-vault": "npm run build && node scripts/install.mjs"
+  },
+  "devDependencies": { "esbuild": "0.25.10" }
+}

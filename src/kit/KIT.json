@@ -1,0 +1,12 @@
+{
+  "version": "1.0.0",
+  "files": [
+    "i18n.js",
+    "format.js",
+    "blocks.js",
+    "page.js",
+    "check.js",
+    "kit.css"
+  ],
+  "hash": "29776320f787e855dee8920cc8a5f4164c577e65585a46e9e8a8517c080c3882"
+}

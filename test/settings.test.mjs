@@ -9,7 +9,7 @@ Module._resolveFilename = function (request, ...rest) {
 };
 class Stub {}
 Module._cache.obsidian = { id: "obsidian", filename: "obsidian", loaded: true, exports: new Proxy({}, { get: () => Stub }) };
-const { parseCurrencyLines, serializeCurrencyLines } = createRequire(import.meta.url)("../main.js");
+const { parseCurrencyLines, serializeCurrencyLines } = createRequire(import.meta.url)("../src/main.js");
 
 test("currency lines round trip", () => {
   const text = "R$ = 1.234,56\n$ = 1,234.56";
