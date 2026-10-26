@@ -56,12 +56,27 @@ const STRINGS = {
     setFolder: "Wishlist folder",
     setFolderDesc: "Where items are created. Notes created here in any other way are filled too.",
     setCurrencies: "Currencies",
-    setCurrenciesDesc: "One per line: symbol = how 1234.56 is written. Example: R$ = 1.234,56",
-    setDefaultCurrency: "Default currency",
-    setDefaultCurrencyDesc: "Must match one of the symbols above.",
+    setCurrenciesDesc: "Symbol and how 1234.56 is written. The star marks the default.",
     setPriorities: "Priorities",
-    setPrioritiesDesc: "Comma-separated, in the order shown in the form.",
-    setDefaultPriority: "Default priority",
+    setPrioritiesDesc: "In the order shown in the form. The star marks the default.",
+    secGeneral: "General",
+    secStatus: "Status",
+    secNote: "Note text",
+    secNoteDesc: "Headings written in every new item.",
+    secBase: "Base",
+    secAdvanced: "Advanced",
+    secAdvancedDesc: "Tag, extra and hidden properties.",
+    show: "Show",
+    hide: "Hide",
+    symbol: "Symbol",
+    addCurrency: "Add currency",
+    addPriority: "Add priority",
+    makeDefault: "Make default",
+    isDefault: "Default",
+    remove: "Remove",
+    moveUp: "Move up",
+    moveDown: "Move down",
+    previewInBase: "in the base",
     setStatus: "Status for new items",
     setStatusDesc: "The base shows these in the Want views.",
     setBoughtStatus: "Status for purchased items",
@@ -148,12 +163,27 @@ const STRINGS = {
     setFolder: "Pasta da wishlist",
     setFolderDesc: "Onde os itens são criados. Notas criadas aqui de outro jeito também são completadas.",
     setCurrencies: "Moedas",
-    setCurrenciesDesc: "Uma por linha: símbolo = como 1234,56 é escrito. Exemplo: $ = 1,234.56",
-    setDefaultCurrency: "Moeda padrão",
-    setDefaultCurrencyDesc: "Precisa ser um dos símbolos acima.",
+    setCurrenciesDesc: "Símbolo e como 1234,56 é escrito. A estrela marca a padrão.",
     setPriorities: "Prioridades",
-    setPrioritiesDesc: "Separadas por vírgula, na ordem em que aparecem no formulário.",
-    setDefaultPriority: "Prioridade padrão",
+    setPrioritiesDesc: "Na ordem em que aparecem no formulário. A estrela marca a padrão.",
+    secGeneral: "Geral",
+    secStatus: "Status",
+    secNote: "Textos da nota",
+    secNoteDesc: "Títulos escritos em todo item novo.",
+    secBase: "Base",
+    secAdvanced: "Avançado",
+    secAdvancedDesc: "Tag, propriedades extras e escondidas.",
+    show: "Mostrar",
+    hide: "Esconder",
+    symbol: "Símbolo",
+    addCurrency: "Adicionar moeda",
+    addPriority: "Adicionar prioridade",
+    makeDefault: "Tornar padrão",
+    isDefault: "Padrão",
+    remove: "Remover",
+    moveUp: "Subir",
+    moveDown: "Descer",
+    previewInBase: "na base",
     setStatus: "Status dos itens novos",
     setStatusDesc: "A base mostra esses itens nas visualizações de Quero.",
     setBoughtStatus: "Status dos itens comprados",
@@ -1172,21 +1202,94 @@ class ValueSuggest extends AbstractInputSuggest {
   }
 }
 
+class FolderSuggest extends AbstractInputSuggest {
+  constructor(app, input) {
+    super(app, input);
+    this.input = input;
+  }
+
+  getSuggestions(query) {
+    const q = query.trim().toLowerCase();
+    return this.app.vault.getAllFolders(false).map((f) => f.path).filter((p) => p.toLowerCase().includes(q)).sort();
+  }
+
+  renderSuggestion(path, el) {
+    el.setText(path);
+  }
+
+  selectSuggestion(path) {
+    this.setValue(path);
+    this.input.dispatchEvent(new Event("input"));
+    this.close();
+  }
+}
+
+const PRICE_FORMATS = ["1,234.56", "1.234,56", "1 234,56", "1'234.56"];
+
 class QuickWishlistSettingTab extends PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
+    this.showAdvanced = false;
+  }
+
+  t(key) {
+    return this.plugin.t(key);
   }
 
   display() {
     const { containerEl } = this;
-    const p = this.plugin;
-    const t = (k) => p.t(k);
     containerEl.empty();
+    // Lists being edited. Kept here so an empty new row survives a redraw.
+    this.currencyList ??= parseCurrencyLines(this.plugin.settings.currencies);
+    this.priorityList ??= this.plugin.list(this.plugin.settings.priorities);
+    this.sectionGeneral(containerEl);
+    this.sectionCurrencies(containerEl);
+    this.sectionPriorities(containerEl);
+    this.sectionStatus(containerEl);
+    this.sectionNote(containerEl);
+    this.sectionBase(containerEl);
+    this.sectionAdvanced(containerEl);
+  }
 
-    new Setting(containerEl).setName(t("setLanguage")).setDesc(t("setLanguageDesc"))
+  hide() {
+    this.currencyList = null;
+    this.priorityList = null;
+  }
+
+  heading(el, name, desc) {
+    const s = new Setting(el).setName(this.t(name)).setHeading();
+    if (desc) s.setDesc(this.t(desc));
+    return s;
+  }
+
+  text(el, name, desc, key, { area = false, onChange } = {}) {
+    const p = this.plugin;
+    return new Setting(el).setName(this.t(name)).setDesc(desc ? this.t(desc) : "")[area ? "addTextArea" : "addText"]((c) => c
+      .setValue(String(p.settings[key] ?? ""))
+      .onChange(async (v) => {
+        p.settings[key] = v;
+        await p.saveSettings();
+        onChange?.(v);
+      }));
+  }
+
+  // Star and trash buttons shared by the currency and priority rows.
+  rowButtons(setting, isDefault, canRemove, onDefault, onRemove) {
+    setting.addExtraButton((b) => {
+      b.setIcon("star").setTooltip(this.t(isDefault ? "isDefault" : "makeDefault")).onClick(onDefault);
+      b.extraSettingsEl.toggleClass("qw-default", isDefault);
+    });
+    setting.addExtraButton((b) => b.setIcon("trash").setTooltip(this.t("remove")).setDisabled(!canRemove)
+      .onClick(() => canRemove && onRemove()));
+  }
+
+  sectionGeneral(el) {
+    const p = this.plugin;
+    this.heading(el, "secGeneral");
+    new Setting(el).setName(this.t("setLanguage")).setDesc(this.t("setLanguageDesc"))
       .addDropdown((d) => d
-        .addOption("auto", t("langAuto"))
+        .addOption("auto", this.t("langAuto"))
         .addOption("en", "English")
         .addOption("pt-BR", "Português (Brasil)")
         .setValue(p.settings.language)
@@ -1195,44 +1298,153 @@ class QuickWishlistSettingTab extends PluginSettingTab {
           await p.saveSettings();
           this.display();
         }));
+    new Setting(el).setName(this.t("setFolder")).setDesc(this.t("setFolderDesc"))
+      .addText((c) => {
+        new FolderSuggest(this.app, c.inputEl);
+        c.setPlaceholder(DEFAULT_SETTINGS.folder).setValue(p.settings.folder).onChange(async (v) => {
+          p.settings.folder = v;
+          await p.saveSettings();
+          await p.indexBases();
+        });
+      });
+  }
 
-    const text = (name, desc, key, { area = false } = {}) => {
-      new Setting(containerEl).setName(t(name)).setDesc(desc ? t(desc) : "")[area ? "addTextArea" : "addText"]((c) => c
-        .setValue(String(p.settings[key] ?? ""))
-        .onChange(async (v) => { p.settings[key] = v; await p.saveSettings(); }));
+  sectionCurrencies(el) {
+    const p = this.plugin;
+    const list = this.currencyList;
+    const save = async () => {
+      p.settings.currencies = serializeCurrencyLines(list);
+      await p.saveSettings();
     };
+    this.heading(el, "setCurrencies", "setCurrenciesDesc");
+    list.forEach((c, i) => {
+      const row = new Setting(el).setName(`${c.symbol} ${c.sample}`).setClass("qw-list-row");
+      row.addText((txt) => {
+        txt.inputEl.addClass("qw-symbol");
+        txt.setPlaceholder(this.t("symbol")).setValue(c.symbol).onChange(async (v) => {
+          if (p.settings.defaultCurrency === c.symbol) p.settings.defaultCurrency = v.trim();
+          c.symbol = v.trim();
+          row.setName(`${c.symbol} ${c.sample}`);
+          await save();
+        });
+      });
+      row.addDropdown((d) => {
+        for (const f of new Set([...PRICE_FORMATS, c.sample])) d.addOption(f, f);
+        d.setValue(c.sample).onChange(async (v) => {
+          c.sample = v;
+          row.setName(`${c.symbol} ${c.sample}`);
+          await save();
+        });
+      });
+      this.rowButtons(row, c.symbol !== "" && c.symbol === p.settings.defaultCurrency, list.length > 1,
+        async () => {
+          p.settings.defaultCurrency = c.symbol;
+          await save();
+          this.display();
+        },
+        async () => {
+          list.splice(i, 1);
+          if (p.settings.defaultCurrency === c.symbol) p.settings.defaultCurrency = list[0].symbol;
+          await save();
+          this.display();
+        });
+    });
+    new Setting(el).addButton((b) => b.setButtonText(this.t("addCurrency")).onClick(() => {
+      list.push({ symbol: "", sample: "1,234.56" });
+      this.display();
+    }));
+  }
 
-    new Setting(containerEl).setName(t("setFolder")).setDesc(t("setFolderDesc"))
-      .addText((c) => c.setPlaceholder(DEFAULT_SETTINGS.folder).setValue(p.settings.folder).onChange(async (v) => {
-        p.settings.folder = v;
-        await p.saveSettings();
-        await p.indexBases();
+  sectionPriorities(el) {
+    const p = this.plugin;
+    const list = this.priorityList;
+    const save = async () => {
+      p.settings.priorities = list.filter(Boolean).join(", ");
+      await p.saveSettings();
+    };
+    const move = async (from, to) => {
+      list.splice(to, 0, list.splice(from, 1)[0]);
+      await save();
+      this.display();
+    };
+    this.heading(el, "setPriorities", "setPrioritiesDesc");
+    list.forEach((name, i) => {
+      const row = new Setting(el).setClass("qw-list-row").setClass("qw-priority-row");
+      row.addText((txt) => txt.setValue(name).onChange(async (v) => {
+        if (p.settings.defaultPriority === list[i]) p.settings.defaultPriority = v.trim();
+        list[i] = v.trim();
+        await save();
       }));
-    text("setCurrencies", "setCurrenciesDesc", "currencies", { area: true });
-    text("setDefaultCurrency", "setDefaultCurrencyDesc", "defaultCurrency");
-    text("setPriorities", "setPrioritiesDesc", "priorities");
-    text("setDefaultPriority", null, "defaultPriority");
-    text("setStatus", "setStatusDesc", "status");
-    text("setBoughtStatus", "setBoughtStatusDesc", "boughtStatus");
-    text("setTag", "setTagDesc", "tag");
-    text("setExtra", "setExtraDesc", "extraFrontmatter", { area: true });
-    new Setting(containerEl).setName(t("setHidden")).setDesc(t("setHiddenDesc"))
-      .addText((c) => c.setValue(p.settings.hiddenProperties ?? "").onChange(async (v) => {
-        p.settings.hiddenProperties = v;
-        await p.saveSettings();
-        p.updateHiddenStyle();
-      }));
-    text("setPhotoHeading", null, "photoHeading");
-    text("setReasonsHeading", null, "reasonsHeading");
-    text("setLinkLabel", "setLinkLabelDesc", "linkLabel");
+      row.addExtraButton((b) => b.setIcon("arrow-up").setTooltip(this.t("moveUp")).setDisabled(i === 0)
+        .onClick(() => i > 0 && move(i, i - 1)));
+      row.addExtraButton((b) => b.setIcon("arrow-down").setTooltip(this.t("moveDown")).setDisabled(i === list.length - 1)
+        .onClick(() => i < list.length - 1 && move(i, i + 1)));
+      this.rowButtons(row, name !== "" && name === p.settings.defaultPriority, list.length > 1,
+        async () => {
+          p.settings.defaultPriority = list[i];
+          await save();
+          this.display();
+        },
+        async () => {
+          const [removed] = list.splice(i, 1);
+          if (p.settings.defaultPriority === removed) p.settings.defaultPriority = list[0];
+          await save();
+          this.display();
+        });
+    });
+    new Setting(el).addButton((b) => b.setButtonText(this.t("addPriority")).onClick(() => {
+      list.push("");
+      this.display();
+    }));
+  }
 
-    const toggle = (name, desc, key) => new Setting(containerEl).setName(t(name)).setDesc(t(desc))
+  sectionStatus(el) {
+    this.heading(el, "secStatus");
+    this.text(el, "setStatus", "setStatusDesc", "status");
+    this.text(el, "setBoughtStatus", "setBoughtStatusDesc", "boughtStatus");
+  }
+
+  sectionNote(el) {
+    const p = this.plugin;
+    this.heading(el, "secNote", "secNoteDesc");
+    let preview;
+    const update = () => {
+      preview.empty();
+      preview.createEl("pre", { text: p.sections("![[photo.png]]", "- ...").trim() });
+      const link = preview.createDiv({ cls: "qw-preview-link" });
+      link.createSpan({ text: `${p.settings.linkLabel} ↗` });
+      link.createSpan({ cls: "qw-preview-caption", text: this.t("previewInBase") });
+    };
+    this.text(el, "setPhotoHeading", null, "photoHeading", { onChange: update });
+    this.text(el, "setReasonsHeading", null, "reasonsHeading", { onChange: update });
+    this.text(el, "setLinkLabel", "setLinkLabelDesc", "linkLabel", { onChange: update });
+    preview = el.createDiv({ cls: "qw-preview" });
+    update();
+  }
+
+  sectionBase(el) {
+    const p = this.plugin;
+    this.heading(el, "secBase");
+    const toggle = (name, desc, key) => new Setting(el).setName(this.t(name)).setDesc(this.t(desc))
       .addToggle((c) => c.setValue(p.settings[key]).onChange(async (v) => {
         p.settings[key] = v;
         await p.saveSettings();
       }));
     toggle("setIntercept", "setInterceptDesc", "interceptNewButton");
     toggle("setFill", "setFillDesc", "fillNewNotes");
+  }
+
+  sectionAdvanced(el) {
+    const p = this.plugin;
+    this.heading(el, "secAdvanced", "secAdvancedDesc").setClass("qw-advanced-toggle")
+      .addButton((b) => b.setButtonText(this.t(this.showAdvanced ? "hide" : "show")).onClick(() => {
+        this.showAdvanced = !this.showAdvanced;
+        this.display();
+      }));
+    if (!this.showAdvanced) return;
+    this.text(el, "setTag", "setTagDesc", "tag");
+    this.text(el, "setExtra", "setExtraDesc", "extraFrontmatter", { area: true });
+    this.text(el, "setHidden", "setHiddenDesc", "hiddenProperties", { onChange: () => p.updateHiddenStyle() });
   }
 }
 
@@ -1262,7 +1474,20 @@ function parsePrice(text, c) {
   return Number.isFinite(n) ? n : null;
 }
 
+// "R$ = 1.234,56\n$ = 1,234.56" <-> [{ symbol: "R$", sample: "1.234,56" }, ...]
+// The settings tab edits currencies as a list but saves the same text as before.
+function parseCurrencyLines(text) {
+  return String(text ?? "").split("\n").map((l) => l.split("=").map((s) => s.trim()))
+    .filter(([symbol]) => symbol).map(([symbol, sample]) => ({ symbol, sample: sample || "1,234.56" }));
+}
+
+function serializeCurrencyLines(list) {
+  return list.filter((c) => c.symbol.trim()).map((c) => `${c.symbol.trim()} = ${c.sample}`).join("\n");
+}
+
 module.exports.formatPrice = formatPrice;
+module.exports.parseCurrencyLines = parseCurrencyLines;
+module.exports.serializeCurrencyLines = serializeCurrencyLines;
 module.exports.parsePrice = parsePrice;
 module.exports.createItem = createItem;
 module.exports.buildBase = buildBase;
