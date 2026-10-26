@@ -103,6 +103,12 @@ function upgradeNote(text, opts) {
 // The notes now keep it in "cover", so every "image: formula.<name>" whose formula reads
 // file.embeds becomes "image: note.cover", and that formula goes unless something else uses it.
 // Returns the whole new text, or null when there is nothing to change.
+
+// A formula name as written after "formula." (letters of any script, digits, "_" and "-").
+const NAME = "[\\p{L}\\p{M}\\p{N}_-]+";
+// A mapping key at the start of an entry: "quoted", 'quoted' or plain text (not a "- " list item).
+const KEY = /^(?:"([^"]+)"|'([^']+)'|(?!-(?:[ \t]|$))([^\s:#][^:]*?))[ \t]*:(?:[ \t]|$)/u;
+
 function convertBase(text) {
   const lines = text.split("\n");
   const head = lines.findIndex((l) => /^formulas:[ \t]*(?:#.*)?$/.test(l));
@@ -110,29 +116,45 @@ function convertBase(text) {
   let end = head + 1;
   while (end < lines.length && (lines[end].trim() === "" || /^[ \t]/.test(lines[end]))) end++;
 
-  // One entry per formula; the lines under a key (block scalars, wrapped values) belong to it.
+  // One entry per formula. A line at the entry indent that starts with a key opens a new entry;
+  // only deeper lines (block scalars, wrapped values) continue the previous one. Comments at the
+  // entry indent belong to the entry that follows them.
+  const isBlank = (l) => l.trim() === "";
+  const first = lines.slice(head + 1, end).find((l) => !isBlank(l) && !/^[ \t]*#/.test(l));
+  const indent = first ? first.match(/^[ \t]*/)[0] : "";
   const entries = [];
-  let indent = null;
+  let pending = null; // first comment line waiting for its entry
   for (let i = head + 1; i < end; i++) {
-    const m = lines[i].match(/^([ \t]+)([\w-]+):(?:[ \t]|$)/);
-    if (m && (indent === null || m[1] === indent)) {
-      indent = m[1];
-      entries.push({ name: m[2], from: i, to: i + 1 });
-    } else if (entries.length) {
-      entries[entries.length - 1].to = i + 1;
+    const line = lines[i];
+    const last = entries[entries.length - 1];
+    if (isBlank(line)) {
+      if (last && pending === null) last.to = i + 1;
+      continue;
+    }
+    const atIndent = line.startsWith(indent) && !/^[ \t]/.test(line.slice(indent.length));
+    const m = atIndent ? line.slice(indent.length).match(KEY) : null;
+    if (m) {
+      entries.push({ name: (m[1] ?? m[2] ?? m[3]).trim(), from: pending ?? i, key: i, to: i + 1 });
+      pending = null;
+    } else if (atIndent && line.slice(indent.length).startsWith("#")) {
+      pending ??= i;
+    } else if (last) {
+      last.to = i + 1;
+      pending = null;
     }
   }
   for (const e of entries) {
-    while (e.to > e.from + 1 && lines[e.to - 1].trim() === "") e.to--;
+    while (e.to > e.key + 1 && isBlank(lines[e.to - 1])) e.to--;
   }
   const readsEmbeds = new Set(
-    entries.filter((e) => lines.slice(e.from, e.to).join("\n").includes("file.embeds")).map((e) => e.name),
+    entries.filter((e) => lines.slice(e.key, e.to).join("\n").includes("file.embeds")).map((e) => e.name),
   );
 
+  const imageLine = new RegExp(`^([ \\t]*)image:[ \\t]*["']?formula\\.(${NAME})["']?[ \\t]*(?:#.*)?$`, "u");
   const replaced = new Set();
   const out = lines.map((line, i) => {
     if (i >= head && i < end) return line;
-    const m = line.match(/^([ \t]*)image:[ \t]*["']?formula\.([\w-]+)["']?[ \t]*(?:#.*)?$/);
+    const m = line.match(imageLine);
     if (!m || !readsEmbeds.has(m[2])) return line;
     replaced.add(m[2]);
     return `${m[1]}image: note.cover`;
@@ -144,12 +166,13 @@ function convertBase(text) {
   for (const e of entries) {
     if (!replaced.has(e.name)) continue;
     const others = out.filter((_, i) => i < e.from || i >= e.to).join("\n");
-    if (!new RegExp(`formula\\.${e.name}(?![\\w-])`).test(others)) {
+    const escaped = e.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (!new RegExp(`formula\\.${escaped}(?![\\p{L}\\p{M}\\p{N}_-])`, "u").test(others)) {
       for (let i = e.from; i < e.to; i++) drop.add(i);
     }
   }
   // A "formulas:" left with no entries is removed too, with the blank lines inside it.
-  if (entries.length && entries.every((e) => drop.has(e.from))) {
+  if (entries.length && entries.every((e) => drop.has(e.key))) {
     for (let i = head; i < end; i++) drop.add(i);
   }
   return out.filter((_, i) => !drop.has(i)).join("\n");

@@ -341,33 +341,49 @@ ${fm}
       const out = convert(crlf ? text.replace(/\r\n/g, "\n") : text, opts);
       return out !== null && crlf ? out.replace(/\n/g, "\r\n") : out;
     }
+    var NAME = "[\\p{L}\\p{M}\\p{N}_-]+";
+    var KEY = /^(?:"([^"]+)"|'([^']+)'|(?!-(?:[ \t]|$))([^\s:#][^:]*?))[ \t]*:(?:[ \t]|$)/u;
     function convertBase(text) {
       const lines = text.split("\n");
       const head = lines.findIndex((l) => /^formulas:[ \t]*(?:#.*)?$/.test(l));
       if (head < 0) return null;
       let end = head + 1;
       while (end < lines.length && (lines[end].trim() === "" || /^[ \t]/.test(lines[end]))) end++;
+      const isBlank = (l) => l.trim() === "";
+      const first = lines.slice(head + 1, end).find((l) => !isBlank(l) && !/^[ \t]*#/.test(l));
+      const indent = first ? first.match(/^[ \t]*/)[0] : "";
       const entries = [];
-      let indent = null;
+      let pending = null;
       for (let i = head + 1; i < end; i++) {
-        const m = lines[i].match(/^([ \t]+)([\w-]+):(?:[ \t]|$)/);
-        if (m && (indent === null || m[1] === indent)) {
-          indent = m[1];
-          entries.push({ name: m[2], from: i, to: i + 1 });
-        } else if (entries.length) {
-          entries[entries.length - 1].to = i + 1;
+        const line = lines[i];
+        const last = entries[entries.length - 1];
+        if (isBlank(line)) {
+          if (last && pending === null) last.to = i + 1;
+          continue;
+        }
+        const atIndent = line.startsWith(indent) && !/^[ \t]/.test(line.slice(indent.length));
+        const m = atIndent ? line.slice(indent.length).match(KEY) : null;
+        if (m) {
+          entries.push({ name: (m[1] ?? m[2] ?? m[3]).trim(), from: pending ?? i, key: i, to: i + 1 });
+          pending = null;
+        } else if (atIndent && line.slice(indent.length).startsWith("#")) {
+          pending ??= i;
+        } else if (last) {
+          last.to = i + 1;
+          pending = null;
         }
       }
       for (const e of entries) {
-        while (e.to > e.from + 1 && lines[e.to - 1].trim() === "") e.to--;
+        while (e.to > e.key + 1 && isBlank(lines[e.to - 1])) e.to--;
       }
       const readsEmbeds = new Set(
-        entries.filter((e) => lines.slice(e.from, e.to).join("\n").includes("file.embeds")).map((e) => e.name)
+        entries.filter((e) => lines.slice(e.key, e.to).join("\n").includes("file.embeds")).map((e) => e.name)
       );
+      const imageLine = new RegExp(`^([ \\t]*)image:[ \\t]*["']?formula\\.(${NAME})["']?[ \\t]*(?:#.*)?$`, "u");
       const replaced = /* @__PURE__ */ new Set();
       const out = lines.map((line, i) => {
         if (i >= head && i < end) return line;
-        const m = line.match(/^([ \t]*)image:[ \t]*["']?formula\.([\w-]+)["']?[ \t]*(?:#.*)?$/);
+        const m = line.match(imageLine);
         if (!m || !readsEmbeds.has(m[2])) return line;
         replaced.add(m[2]);
         return `${m[1]}image: note.cover`;
@@ -377,11 +393,12 @@ ${fm}
       for (const e of entries) {
         if (!replaced.has(e.name)) continue;
         const others = out.filter((_, i) => i < e.from || i >= e.to).join("\n");
-        if (!new RegExp(`formula\\.${e.name}(?![\\w-])`).test(others)) {
+        const escaped = e.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        if (!new RegExp(`formula\\.${escaped}(?![\\p{L}\\p{M}\\p{N}_-])`, "u").test(others)) {
           for (let i = e.from; i < e.to; i++) drop.add(i);
         }
       }
-      if (entries.length && entries.every((e) => drop.has(e.from))) {
+      if (entries.length && entries.every((e) => drop.has(e.key))) {
         for (let i = head; i < end; i++) drop.add(i);
       }
       return out.filter((_, i) => !drop.has(i)).join("\n");
@@ -397,6 +414,28 @@ ${fm}
       }
     }
     module2.exports = { upgradeNote: upgradeNote2, upgradeBase: upgradeBase2 };
+  }
+});
+
+// src/util.js
+var require_util = __commonJS({
+  "src/util.js"(exports2, module2) {
+    "use strict";
+    function buyHref2(raw) {
+      if (typeof raw !== "string") return null;
+      const link = raw.trim();
+      if (/^https?:\/\//i.test(link)) return link;
+      if (/^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(link)) return `https://${link}`;
+      return null;
+    }
+    function countPhrase2(t, notes, bases) {
+      const parts = [];
+      if (notes) parts.push(t(notes === 1 ? "countNote" : "countNotes", { n: notes }));
+      if (bases) parts.push(t(bases === 1 ? "countBase" : "countBases", { n: bases }));
+      if (!parts.length) return t("countNotes", { n: 0 });
+      return parts.length === 2 ? t("countAnd", { a: parts[0], b: parts[1] }) : parts[0];
+    }
+    module2.exports = { buyHref: buyHref2, countPhrase: countPhrase2 };
   }
 });
 
@@ -421,6 +460,7 @@ var { formatMoney, formatDate } = require_format();
 var { readItems, writeBlock } = require_blocks();
 var { renderHeader, renderEditableList } = require_page();
 var { upgradeNote, upgradeBase } = require_upgrade();
+var { buyHref, countPhrase } = require_util();
 var SMART_VIEW = "qw-smart-categories";
 var STRINGS = {
   en: {
@@ -539,14 +579,21 @@ var STRINGS = {
     others: "Others",
     emptyView: "No items yet.",
     upgradeTitle: "Upgrade old notes",
-    upgradeBody: "{count} notes in {folder} will get the item page: the photo moves to the cover property and the reasons go into a list. The rest of each note stays as it is.",
-    upgradeBodyBases: "{count} notes and {bases} bases in {folder} will get the item page: in the notes, the photo moves to the cover property and the reasons go into a list. The bases show the cover property instead of the photo formula. The rest stays as it is.",
+    upgradeBody: "This will upgrade {items} in {folder} to the item page.",
+    upgradeBodyNotes: "In each note, the photo moves to the cover property and the reasons go into a list.",
+    upgradeBodyBases: "Each base shows the cover property instead of the photo formula.",
+    upgradeBodyEnd: "The rest stays as it is.",
     upgradeRun: "Upgrade",
     upgradeCancel: "Cancel",
     upgradeNone: "Every note already uses the item page.",
-    upgradeDone: "{count} notes upgraded.",
-    upgradeDoneBases: "{count} notes and {bases} bases upgraded.",
-    upgradeSkipped: "Skipped, could not read: {names}"
+    upgradeDone: "Upgraded: {items}.",
+    upgradeSkipped: "Skipped, could not read: {names}",
+    upgradeBasesLater: "Bases left for the next run, so the skipped notes keep their photos.",
+    countNote: "{n} note",
+    countNotes: "{n} notes",
+    countBase: "{n} base",
+    countBases: "{n} bases",
+    countAnd: "{a} and {b}"
   },
   pt: {
     cmdNewItem: "Novo item da wishlist",
@@ -662,14 +709,21 @@ var STRINGS = {
     others: "Outros",
     emptyView: "Nenhum item ainda.",
     upgradeTitle: "Atualizar notas antigas",
-    upgradeBody: "{count} notas em {folder} v\xE3o ganhar a p\xE1gina do item: a foto vai para a propriedade cover e os motivos viram uma lista. O resto de cada nota fica como est\xE1.",
-    upgradeBodyBases: "{count} notas e {bases} bases em {folder} v\xE3o ganhar a p\xE1gina do item: nas notas, a foto vai para a propriedade cover e os motivos viram uma lista. As bases passam a mostrar a propriedade cover no lugar da f\xF3rmula da foto. O resto fica como est\xE1.",
+    upgradeBody: "Isto vai atualizar {items} em {folder} para a p\xE1gina do item.",
+    upgradeBodyNotes: "Em cada nota, a foto vai para a propriedade cover e os motivos viram uma lista.",
+    upgradeBodyBases: "Cada base passa a mostrar a propriedade cover no lugar da f\xF3rmula da foto.",
+    upgradeBodyEnd: "O resto fica como est\xE1.",
     upgradeRun: "Atualizar",
     upgradeCancel: "Cancelar",
     upgradeNone: "Todas as notas j\xE1 usam a p\xE1gina do item.",
-    upgradeDone: "{count} notas atualizadas.",
-    upgradeDoneBases: "{count} notas e {bases} bases atualizadas.",
-    upgradeSkipped: "Puladas, n\xE3o deu para ler: {names}"
+    upgradeDone: "Atualizado: {items}.",
+    upgradeSkipped: "Puladas, n\xE3o deu para ler: {names}",
+    upgradeBasesLater: "As bases ficam para a pr\xF3xima execu\xE7\xE3o, para as notas puladas n\xE3o perderem a foto.",
+    countNote: "{n} nota",
+    countNotes: "{n} notas",
+    countBase: "{n} base",
+    countBases: "{n} bases",
+    countAnd: "{a} e {b}"
   }
 };
 var LOCALE_DEFAULTS = {
@@ -984,6 +1038,7 @@ ${reasons ? reasons + "\n" : ""}\`\`\`
   // Each file is rewritten in a single write, so a failure never leaves one half done.
   async upgradeNotes() {
     const opts = this.upgradeOptions();
+    const t = (key, vars) => this.t(key, vars);
     const notes = [];
     for (const f of this.app.vault.getMarkdownFiles()) {
       if (!this.isWishlistNote(f)) continue;
@@ -995,33 +1050,48 @@ ${reasons ? reasons + "\n" : ""}\`\`\`
       if (f && upgradeBase(await this.app.vault.cachedRead(f)) !== null) bases.push(f);
     }
     if (!notes.length && !bases.length) {
-      new Notice(this.t("upgradeNone"));
+      new Notice(t("upgradeNone"));
       return;
     }
-    const vars = { count: notes.length, bases: bases.length, folder: this.folder };
+    const body = [
+      t("upgradeBody", { items: countPhrase(t, notes.length, bases.length), folder: this.folder }),
+      notes.length ? t("upgradeBodyNotes") : "",
+      bases.length ? t("upgradeBodyBases") : "",
+      t("upgradeBodyEnd")
+    ].filter(Boolean).join(" ");
     new ConfirmModal(this.app, {
-      title: this.t("upgradeTitle"),
-      body: this.t(bases.length ? "upgradeBodyBases" : "upgradeBody", vars),
-      confirm: this.t("upgradeRun"),
-      cancel: this.t("upgradeCancel"),
+      title: t("upgradeTitle"),
+      body,
+      confirm: t("upgradeRun"),
+      cancel: t("upgradeCancel"),
       onConfirm: async () => {
         const skipped = [];
-        let doneNotes = 0;
-        let doneBases = 0;
-        for (const f of [...notes, ...bases]) {
-          const isBase = f.extension === "base";
+        const rewrite = async (f, convert) => {
+          let changed = false;
           try {
-            await this.app.vault.process(f, (text) => (isBase ? upgradeBase(text) : upgradeNote(text, opts)) ?? text);
-            if (isBase) doneBases++;
-            else doneNotes++;
+            await this.app.vault.process(f, (text) => {
+              const out = convert(text);
+              changed = out !== null && out !== text;
+              return changed ? out : text;
+            });
           } catch (err) {
             console.error(err);
-            skipped.push(isBase ? f.name : f.basename);
+            skipped.push(f.extension === "base" ? f.name : f.basename);
+            return false;
           }
+          return changed;
+        };
+        let doneNotes = 0;
+        let doneBases = 0;
+        for (const f of notes) if (await rewrite(f, (text) => upgradeNote(text, opts))) doneNotes++;
+        const basesLater = skipped.length > 0 && bases.length > 0;
+        if (!basesLater) {
+          for (const f of bases) if (await rewrite(f, upgradeBase)) doneBases++;
         }
-        const msg = bases.length ? this.t("upgradeDoneBases", { count: doneNotes, bases: doneBases }) : this.t("upgradeDone", { count: doneNotes });
-        new Notice(skipped.length ? `${msg}
-${this.t("upgradeSkipped", { names: skipped.join(", ") })}` : msg, 8e3);
+        const lines = [t("upgradeDone", { items: countPhrase(t, doneNotes, doneBases) })];
+        if (skipped.length) lines.push(t("upgradeSkipped", { names: skipped.join(", ") }));
+        if (basesLater) lines.push(t("upgradeBasesLater"));
+        new Notice(lines.join("\n"), 8e3);
       }
     }).open();
   }
@@ -1307,8 +1377,8 @@ var WishPage = class extends MarkdownRenderChild {
     const bought = fm.status === p.settings.boughtStatus;
     const present = (v) => v !== null && v !== void 0 && v !== "";
     const actions = [];
-    const link = String(fm.link ?? "").trim();
-    if (link) actions.push({ text: t("pageBuy"), href: /^https?:\/\//i.test(link) ? link : `https://${link}` });
+    const href = buyHref(fm.link);
+    if (href) actions.push({ text: t("pageBuy"), href });
     actions.push({ text: t(bought ? "pageBackToWant" : "pageMarkBought"), cta: !bought, onClick: () => p.togglePurchased(file).catch(console.error) });
     this.containerEl.empty();
     renderHeader(this.containerEl.createDiv("kit-page qw-page"), {

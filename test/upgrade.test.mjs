@@ -222,3 +222,48 @@ test("a second pass over an upgraded base finds nothing to do", () => {
   assert.equal(upgradeBase(upgradeBase(OLD_PLUGIN_BASE)), null);
   assert.equal(upgradeBase(upgradeBase(OWN_NAME_BASE)), null);
 });
+
+// Neighbouring formulas with non-ASCII or quoted names are separate entries, never absorbed.
+const BASE_HEAD = "filters:\n  and:\n    - file.inFolder(\"Wishlist\")\n";
+const BASE_VIEWS = "views:\n  - type: cards\n    name: All items\n    order:\n      - file.name\n      - formula.descrição\n    image: formula.photo\n";
+
+test("a non-ASCII formula after the photo formula is kept", () => {
+  const base = `${BASE_HEAD}formulas:\n  photo: file.embeds[0]\n  descrição: note.desc\n${BASE_VIEWS}`;
+  assert.equal(upgradeBase(base), base
+    .replace("  photo: file.embeds[0]\n", "")
+    .replace("image: formula.photo", "image: note.cover"));
+});
+
+test("quoted keys after the photo formula are kept", () => {
+  const base = `${BASE_HEAD}formulas:\n  photo: file.embeds[0]\n  "my formula": note.a\n  'other one': note.b\n  preço: note.price\nviews:\n  - type: cards\n    image: formula.photo\n`;
+  assert.equal(upgradeBase(base), base
+    .replace("  photo: file.embeds[0]\n", "")
+    .replace("image: formula.photo", "image: note.cover"));
+});
+
+test("a quoted photo formula is replaced and removed", () => {
+  const base = `formulas:\n  "photo": file.embeds[0]\n  preço: note.price\nviews:\n  - type: cards\n    image: formula.photo\n`;
+  assert.equal(upgradeBase(base), "formulas:\n  preço: note.price\nviews:\n  - type: cards\n    image: note.cover\n");
+});
+
+test("a photo formula with a non-ASCII name is found and removed", () => {
+  const base = "formulas:\n  imagem-ção: file.embeds[0]\n  b: 1\nviews:\n  - type: cards\n    image: formula.imagem-ção\n";
+  assert.equal(upgradeBase(base), "formulas:\n  b: 1\nviews:\n  - type: cards\n    image: note.cover\n");
+});
+
+test("a comment above a kept formula stays, a comment above the dropped one goes with it", () => {
+  const base = "formulas:\n  site: 1\n  # the photo\n  photo: file.embeds[0]\n  # price\n  preço: note.price\n  # the end\nviews:\n  - type: cards\n    image: formula.photo\n";
+  assert.equal(upgradeBase(base),
+    "formulas:\n  site: 1\n  # price\n  preço: note.price\n  # the end\nviews:\n  - type: cards\n    image: note.cover\n");
+});
+
+test("a block formula is dropped whole and the non-ASCII key after it stays", () => {
+  const base = "formulas:\n  photo: |\n    file.embeds\n      # not a key\n      .filter(true)[0]\n\n  descrição: note.desc\nviews:\n  - type: cards\n    order:\n      - formula.descrição\n    image: formula.photo\n";
+  assert.equal(upgradeBase(base),
+    "formulas:\n\n  descrição: note.desc\nviews:\n  - type: cards\n    order:\n      - formula.descrição\n    image: note.cover\n");
+});
+
+test("an embeds mention in a comment above the next formula does not make it a photo formula", () => {
+  const base = "formulas:\n  photo: file.embeds[0]\n  # file.embeds trick\n  pic: note.picture\nviews:\n  - type: cards\n    image: formula.pic\n";
+  assert.equal(upgradeBase(base), null);
+});

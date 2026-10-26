@@ -9,6 +9,7 @@ const { formatMoney, formatDate } = require("./kit/format");
 const { readItems, writeBlock } = require("./kit/blocks");
 const { renderHeader, renderEditableList } = require("./kit/page");
 const { upgradeNote, upgradeBase } = require("./upgrade");
+const { buyHref, countPhrase } = require("./util");
 
 const SMART_VIEW = "qw-smart-categories";
 
@@ -130,14 +131,21 @@ const STRINGS = {
     others: "Others",
     emptyView: "No items yet.",
     upgradeTitle: "Upgrade old notes",
-    upgradeBody: "{count} notes in {folder} will get the item page: the photo moves to the cover property and the reasons go into a list. The rest of each note stays as it is.",
-    upgradeBodyBases: "{count} notes and {bases} bases in {folder} will get the item page: in the notes, the photo moves to the cover property and the reasons go into a list. The bases show the cover property instead of the photo formula. The rest stays as it is.",
+    upgradeBody: "This will upgrade {items} in {folder} to the item page.",
+    upgradeBodyNotes: "In each note, the photo moves to the cover property and the reasons go into a list.",
+    upgradeBodyBases: "Each base shows the cover property instead of the photo formula.",
+    upgradeBodyEnd: "The rest stays as it is.",
     upgradeRun: "Upgrade",
     upgradeCancel: "Cancel",
     upgradeNone: "Every note already uses the item page.",
-    upgradeDone: "{count} notes upgraded.",
-    upgradeDoneBases: "{count} notes and {bases} bases upgraded.",
+    upgradeDone: "Upgraded: {items}.",
     upgradeSkipped: "Skipped, could not read: {names}",
+    upgradeBasesLater: "Bases left for the next run, so the skipped notes keep their photos.",
+    countNote: "{n} note",
+    countNotes: "{n} notes",
+    countBase: "{n} base",
+    countBases: "{n} bases",
+    countAnd: "{a} and {b}",
   },
   pt: {
     cmdNewItem: "Novo item da wishlist",
@@ -253,14 +261,21 @@ const STRINGS = {
     others: "Outros",
     emptyView: "Nenhum item ainda.",
     upgradeTitle: "Atualizar notas antigas",
-    upgradeBody: "{count} notas em {folder} vão ganhar a página do item: a foto vai para a propriedade cover e os motivos viram uma lista. O resto de cada nota fica como está.",
-    upgradeBodyBases: "{count} notas e {bases} bases em {folder} vão ganhar a página do item: nas notas, a foto vai para a propriedade cover e os motivos viram uma lista. As bases passam a mostrar a propriedade cover no lugar da fórmula da foto. O resto fica como está.",
+    upgradeBody: "Isto vai atualizar {items} em {folder} para a página do item.",
+    upgradeBodyNotes: "Em cada nota, a foto vai para a propriedade cover e os motivos viram uma lista.",
+    upgradeBodyBases: "Cada base passa a mostrar a propriedade cover no lugar da fórmula da foto.",
+    upgradeBodyEnd: "O resto fica como está.",
     upgradeRun: "Atualizar",
     upgradeCancel: "Cancelar",
     upgradeNone: "Todas as notas já usam a página do item.",
-    upgradeDone: "{count} notas atualizadas.",
-    upgradeDoneBases: "{count} notas e {bases} bases atualizadas.",
+    upgradeDone: "Atualizado: {items}.",
     upgradeSkipped: "Puladas, não deu para ler: {names}",
+    upgradeBasesLater: "As bases ficam para a próxima execução, para as notas puladas não perderem a foto.",
+    countNote: "{n} nota",
+    countNotes: "{n} notas",
+    countBase: "{n} base",
+    countBases: "{n} bases",
+    countAnd: "{a} e {b}",
   },
 };
 
@@ -611,6 +626,7 @@ module.exports = class QuickWishlist extends Plugin {
   // Each file is rewritten in a single write, so a failure never leaves one half done.
   async upgradeNotes() {
     const opts = this.upgradeOptions();
+    const t = (key, vars) => this.t(key, vars);
     const notes = [];
     for (const f of this.app.vault.getMarkdownFiles()) {
       if (!this.isWishlistNote(f)) continue;
@@ -622,34 +638,48 @@ module.exports = class QuickWishlist extends Plugin {
       if (f && upgradeBase(await this.app.vault.cachedRead(f)) !== null) bases.push(f);
     }
     if (!notes.length && !bases.length) {
-      new Notice(this.t("upgradeNone"));
+      new Notice(t("upgradeNone"));
       return;
     }
-    const vars = { count: notes.length, bases: bases.length, folder: this.folder };
+    const body = [
+      t("upgradeBody", { items: countPhrase(t, notes.length, bases.length), folder: this.folder }),
+      notes.length ? t("upgradeBodyNotes") : "",
+      bases.length ? t("upgradeBodyBases") : "",
+      t("upgradeBodyEnd"),
+    ].filter(Boolean).join(" ");
     new ConfirmModal(this.app, {
-      title: this.t("upgradeTitle"),
-      body: this.t(bases.length ? "upgradeBodyBases" : "upgradeBody", vars),
-      confirm: this.t("upgradeRun"),
-      cancel: this.t("upgradeCancel"),
+      title: t("upgradeTitle"),
+      body,
+      confirm: t("upgradeRun"),
+      cancel: t("upgradeCancel"),
       onConfirm: async () => {
         const skipped = [];
-        let doneNotes = 0;
-        let doneBases = 0;
-        for (const f of [...notes, ...bases]) {
-          const isBase = f.extension === "base";
+        // Rewrites one file in a single write; true only when its text really changed.
+        const rewrite = async (f, convert) => {
+          let changed = false;
           try {
-            await this.app.vault.process(f, (text) => (isBase ? upgradeBase(text) : upgradeNote(text, opts)) ?? text);
-            if (isBase) doneBases++;
-            else doneNotes++;
+            await this.app.vault.process(f, (text) => {
+              const out = convert(text);
+              changed = out !== null && out !== text;
+              return changed ? out : text;
+            });
           } catch (err) {
             console.error(err);
-            skipped.push(isBase ? f.name : f.basename);
+            skipped.push(f.extension === "base" ? f.name : f.basename);
+            return false;
           }
-        }
-        const msg = bases.length
-          ? this.t("upgradeDoneBases", { count: doneNotes, bases: doneBases })
-          : this.t("upgradeDone", { count: doneNotes });
-        new Notice(skipped.length ? `${msg}\n${this.t("upgradeSkipped", { names: skipped.join(", ") })}` : msg, 8000);
+          return changed;
+        };
+        let doneNotes = 0;
+        let doneBases = 0;
+        for (const f of notes) if (await rewrite(f, (text) => upgradeNote(text, opts))) doneNotes++;
+        // Bases switch to the cover property, so they wait until every note has one.
+        const basesLater = skipped.length > 0 && bases.length > 0;
+        if (!basesLater) for (const f of bases) if (await rewrite(f, upgradeBase)) doneBases++;
+        const lines = [t("upgradeDone", { items: countPhrase(t, doneNotes, doneBases) })];
+        if (skipped.length) lines.push(t("upgradeSkipped", { names: skipped.join(", ") }));
+        if (basesLater) lines.push(t("upgradeBasesLater"));
+        new Notice(lines.join("\n"), 8000);
       },
     }).open();
   }
@@ -961,8 +991,8 @@ class WishPage extends MarkdownRenderChild {
     const bought = fm.status === p.settings.boughtStatus;
     const present = (v) => v !== null && v !== undefined && v !== "";
     const actions = [];
-    const link = String(fm.link ?? "").trim();
-    if (link) actions.push({ text: t("pageBuy"), href: /^https?:\/\//i.test(link) ? link : `https://${link}` });
+    const href = buyHref(fm.link);
+    if (href) actions.push({ text: t("pageBuy"), href });
     actions.push({ text: t(bought ? "pageBackToWant" : "pageMarkBought"), cta: !bought, onClick: () => p.togglePurchased(file).catch(console.error) });
     this.containerEl.empty();
     renderHeader(this.containerEl.createDiv("kit-page qw-page"), {
