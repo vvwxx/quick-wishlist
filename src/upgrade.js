@@ -1,6 +1,9 @@
 "use strict";
 
-// Turns an old wishlist note ("## Photo" with an embed, "## Why I want it" with a list)
+// Two pure functions for the "upgrade old notes" command:
+// upgradeNote: an old wishlist note -> the page format. upgradeBase: an old base -> reads the cover property.
+//
+// upgradeNote: turns an old wishlist note ("## Photo" with an embed, "## Why I want it" with a list)
 // into the page format: "cover" property, ```wish block, ```reasons block.
 // Returns the whole new text, or null when the note already has the page format.
 
@@ -96,4 +99,71 @@ function upgradeNote(text, opts) {
   return out !== null && crlf ? out.replace(/\n/g, "\r\n") : out;
 }
 
-module.exports = { upgradeNote };
+// Old bases showed the photo through a formula over file.embeds ("image: formula.photo").
+// The notes now keep it in "cover", so every "image: formula.<name>" whose formula reads
+// file.embeds becomes "image: note.cover", and that formula goes unless something else uses it.
+// Returns the whole new text, or null when there is nothing to change.
+function convertBase(text) {
+  const lines = text.split("\n");
+  const head = lines.findIndex((l) => /^formulas:[ \t]*(?:#.*)?$/.test(l));
+  if (head < 0) return null;
+  let end = head + 1;
+  while (end < lines.length && (lines[end].trim() === "" || /^[ \t]/.test(lines[end]))) end++;
+
+  // One entry per formula; the lines under a key (block scalars, wrapped values) belong to it.
+  const entries = [];
+  let indent = null;
+  for (let i = head + 1; i < end; i++) {
+    const m = lines[i].match(/^([ \t]+)([\w-]+):(?:[ \t]|$)/);
+    if (m && (indent === null || m[1] === indent)) {
+      indent = m[1];
+      entries.push({ name: m[2], from: i, to: i + 1 });
+    } else if (entries.length) {
+      entries[entries.length - 1].to = i + 1;
+    }
+  }
+  for (const e of entries) {
+    while (e.to > e.from + 1 && lines[e.to - 1].trim() === "") e.to--;
+  }
+  const readsEmbeds = new Set(
+    entries.filter((e) => lines.slice(e.from, e.to).join("\n").includes("file.embeds")).map((e) => e.name),
+  );
+
+  const replaced = new Set();
+  const out = lines.map((line, i) => {
+    if (i >= head && i < end) return line;
+    const m = line.match(/^([ \t]*)image:[ \t]*["']?formula\.([\w-]+)["']?[ \t]*(?:#.*)?$/);
+    if (!m || !readsEmbeds.has(m[2])) return line;
+    replaced.add(m[2]);
+    return `${m[1]}image: note.cover`;
+  });
+  if (!replaced.size) return null;
+
+  // Drop a replaced formula unless a column, a property or another formula still refers to it.
+  const drop = new Set();
+  for (const e of entries) {
+    if (!replaced.has(e.name)) continue;
+    const others = out.filter((_, i) => i < e.from || i >= e.to).join("\n");
+    if (!new RegExp(`formula\\.${e.name}(?![\\w-])`).test(others)) {
+      for (let i = e.from; i < e.to; i++) drop.add(i);
+    }
+  }
+  // A "formulas:" left with no entries is removed too, with the blank lines inside it.
+  if (entries.length && entries.every((e) => drop.has(e.from))) {
+    for (let i = head; i < end; i++) drop.add(i);
+  }
+  return out.filter((_, i) => !drop.has(i)).join("\n");
+}
+
+function upgradeBase(text) {
+  try {
+    if (typeof text !== "string") return null;
+    const crlf = text.includes("\r\n");
+    const out = convertBase(crlf ? text.replace(/\r\n/g, "\n") : text);
+    return out !== null && crlf ? out.replace(/\n/g, "\r\n") : out;
+  } catch {
+    return null;
+  }
+}
+
+module.exports = { upgradeNote, upgradeBase };
