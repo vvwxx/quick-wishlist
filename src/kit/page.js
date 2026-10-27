@@ -11,7 +11,10 @@ let dragging = null;
 // size "small" (default) is the 96px logo used by Projects. "large" puts a 240px photo beside the title.
 function renderHeader(el, { image = null, title, lines = [], actions = [], size = "small" }) {
   const top = el.createDiv(size === "large" ? "kit-header is-large" : "kit-header");
-  if (image) top.createEl("img", { cls: "kit-cover", attr: { src: image, alt: title } });
+  if (image) {
+    const img = top.createEl("img", { cls: "kit-cover", attr: { src: image, alt: title } });
+    img.onclick = (e) => { e.preventDefault(); e.stopPropagation(); zoomImage(image, title); };
+  }
   const id = top.createDiv("kit-id");
   id.createDiv({ cls: "kit-title", text: title });
   for (const parts of lines) {
@@ -28,6 +31,17 @@ function renderHeader(el, { image = null, title, lines = [], actions = [], size 
     }
   }
   return top;
+}
+
+// Photo at full size over the screen. A click anywhere or Esc closes it.
+function zoomImage(src, alt) {
+  const doc = activeDocument;
+  const overlay = doc.body.createDiv("kit-zoom");
+  overlay.createEl("img", { attr: { src, alt } });
+  const close = () => { overlay.remove(); doc.removeEventListener("keydown", onKey, true); };
+  const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); } };
+  overlay.onclick = close;
+  doc.addEventListener("keydown", onKey, true);
 }
 
 function iconButton(parent, icon, label, fn) {
